@@ -1,0 +1,105 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    --color-brand-primary: #D49A32;
+    --color-brand-secondary: #0C0F17;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background-color: #080A0F;
+    color: #E2E8F0;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-sans);
+    letter-spacing: -0.025em;
+  }
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(212, 154, 50, 0.4);
+}
+
+/* 2026 Modern Glass & Surface Elevation */
+.modern-glass {
+  background: rgba(15, 18, 28, 0.7);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.modern-card {
+  background: #0E111A;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: 0 16px 36px -12px rgba(0, 0, 0, 0.5);
+}
+
+.modern-card-interactive {
+  background: #0E111A;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.modern-card-interactive:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+  transform: translateY(-2px);
+  box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.6);
+}
+
+/* Refined Subtle Accent */
+.accent-gradient-cta {
+  background: linear-gradient(135deg, #F5D77F 0%, #D49A32 50%, #B87C1D 100%);
+  color: #0A0D14;
+}
+.accent-gradient-cta:hover {
+  filter: brightness(1.08);
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes pulseSubtle {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50% { opacity: 0.9; transform: scale(1.02); }
+}
+
+.animate-pulse-subtle {
+  animation: pulseSubtle 4s ease-in-out infinite;
+}
+
+@keyframes floatGentle {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-5px); }
+}
+
+.animate-float {
+  animation: floatGentle 5s ease-in-out infinite;
+}
