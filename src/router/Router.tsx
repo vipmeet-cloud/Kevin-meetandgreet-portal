@@ -38,6 +38,16 @@ interface RouterProviderProps {
 export function RouterProvider({ children }: RouterProviderProps) {
   const [path, setPath] = useState<string>(() => {
     if (typeof window !== 'undefined') {
+      try {
+        const searchParams = new URLSearchParams(window.location.search);
+        const redirectPath = searchParams.get('redirect');
+        if (redirectPath) {
+          window.history.replaceState({}, '', redirectPath);
+          return redirectPath.split('?')[0].split('#')[0] || '/';
+        }
+      } catch {
+        // Fallback to pathname
+      }
       return window.location.pathname || '/';
     }
     return '/';
@@ -46,8 +56,10 @@ export function RouterProvider({ children }: RouterProviderProps) {
   const [params, setParams] = useState<Record<string, string>>({});
 
   const updatePathAndParams = useCallback((newPath: string) => {
+    // Strip query parameters and hashes for route matching
+    const pathnameOnly = (newPath || '/').split('?')[0].split('#')[0];
     // Normalize path by stripping trailing slash unless root
-    const cleanPath = newPath.length > 1 && newPath.endsWith('/') ? newPath.slice(0, -1) : newPath;
+    const cleanPath = pathnameOnly.length > 1 && pathnameOnly.endsWith('/') ? pathnameOnly.slice(0, -1) : pathnameOnly;
     setPath(cleanPath);
 
     // Extract dynamic params for routes like /continue/:token, /payment/:token, /vip-pass/:token, /verify/:token
@@ -56,10 +68,13 @@ export function RouterProvider({ children }: RouterProviderProps) {
 
     if (parts.length >= 2) {
       const prefix = `/${parts[0]}`;
-      if (['/continue', '/payment', '/vip-pass', '/verify'].includes(prefix)) {
+      if (['/continue', '/payment', '/vip-pass', '/verify', '/verify-pass'].includes(prefix)) {
         extractedParams.token = parts[1];
       }
       if (parts[0] === 'management' && parts[1] === 'applications' && parts[2]) {
+        extractedParams.id = parts[2];
+      }
+      if (parts[0] === 'management' && parts[1] === 'payments' && parts[2]) {
         extractedParams.id = parts[2];
       }
     }

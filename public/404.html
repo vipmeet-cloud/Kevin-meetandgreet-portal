@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VIP Meet & Greet</title>
+  <script>
+    // SPA redirect for static hosts (GitHub Pages, S3, etc.)
+    var path = window.location.pathname;
+    var search = window.location.search;
+    var hash = window.location.hash;
+    window.location.replace('/' + (path ? '?redirect=' + encodeURIComponent(path + search + hash) : ''));
+  </script>
+</head>
+<body style="background-color: #080A0F; color: #FFFFFF; font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0;">
+  <p>Loading...</p>
+</body>
+</html>

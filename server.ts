@@ -371,11 +371,50 @@ async function startServer() {
       appType: 'spa',
     });
     app.use(vite.middlewares);
+
+    // Fallback for SPA routing in development so refreshing any page works
+    app.use('*', async (req: Request, res: Response, next) => {
+      const url = req.originalUrl;
+      // Do not catch API routes
+      if (url.startsWith('/api')) {
+        return next();
+      }
+      try {
+        const indexPath = path.resolve(process.cwd(), 'index.html');
+        if (fs.existsSync(indexPath)) {
+          let template = fs.readFileSync(indexPath, 'utf-8');
+          template = await vite.transformIndexHtml(url, template);
+          res.status(200).set({ 'Content-Type': 'text/html' }).end(template);
+          return;
+        }
+        next();
+      } catch (e: unknown) {
+        if (e instanceof Error) {
+          vite.ssrFixStacktrace(e);
+        }
+        next(e);
+      }
+    });
   } else {
     const distPath = path.resolve(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (_req: Request, res: Response) => {
-      res.sendFile(path.resolve(distPath, 'index.html'));
+    const distIndex = path.resolve(distPath, 'index.html');
+    const rootIndex = path.resolve(process.cwd(), 'index.html');
+
+    if (fs.existsSync(distPath)) {
+      app.use(express.static(distPath));
+    }
+
+    app.get('*', (req: Request, res: Response, next) => {
+      if (req.originalUrl.startsWith('/api')) {
+        return next();
+      }
+      if (fs.existsSync(distIndex)) {
+        res.sendFile(distIndex);
+      } else if (fs.existsSync(rootIndex)) {
+        res.sendFile(rootIndex);
+      } else {
+        res.status(404).send('Not Found');
+      }
     });
   }
 

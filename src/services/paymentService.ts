@@ -2,6 +2,7 @@ import { getSupabaseClient } from './supabase';
 import { tokenService } from './tokenService';
 import { emailService } from './emailService';
 import { passService } from './passService';
+import { applicationService } from './applicationService';
 import { 
   PaymentRecord, 
   PaymentSubmissionData, 

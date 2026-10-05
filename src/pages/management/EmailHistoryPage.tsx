@@ -81,7 +81,7 @@ export function EmailHistoryPage() {
   const failedCount = logs.filter(l => l.status === 'failed').length;
 
   return (
-    <ManagementLayout>
+    <ManagementLayout title="Email History" subtitle="Track emails sent to applicants and guests">
       <div className="space-y-8">
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/[0.08] pb-6">

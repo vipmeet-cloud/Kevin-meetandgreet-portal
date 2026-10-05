@@ -64,7 +64,7 @@ export function ContinuationPage() {
           }
 
           // Fetch VIP pass if ready
-          const passRec = await passService.getPassByApplicationId(res.application.id);
+          const passRec = await passService.fetchPassByApplicationId(res.application.id);
           if (passRec) {
             setPass(passRec);
           }
@@ -294,7 +294,7 @@ export function ContinuationPage() {
           <div className="p-4 rounded-2xl bg-black/40 border border-white/[0.08] max-w-sm mx-auto text-left text-xs space-y-2 font-mono">
             <div className="flex justify-between">
               <span className="text-slate-400">Pass Number:</span>
-              <span className="text-white font-bold">{pass.pass_id}</span>
+              <span className="text-white font-bold">{pass.pass_number}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-400">Status:</span>
