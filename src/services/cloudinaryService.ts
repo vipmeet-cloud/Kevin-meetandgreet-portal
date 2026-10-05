@@ -6,6 +6,8 @@
  * architecture is staged for future direct upload workflows.
  */
 
+import { uploadImageToCloudinary, getCloudinaryConfig } from './cloudinary';
+
 export interface CloudinaryConfigStatus {
   isConfigured: boolean;
   cloudName: string | null;
@@ -17,11 +19,11 @@ export const cloudinaryService = {
    * Evaluates if Cloudinary service is ready for direct API uploads
    */
   getStatus(): CloudinaryConfigStatus {
-    const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || null;
-    if (cloudName && cloudName.trim().length > 0) {
+    const config = getCloudinaryConfig();
+    if (config.isConfigured) {
       return {
         isConfigured: true,
-        cloudName,
+        cloudName: config.cloudName,
         message: 'Cloudinary media service is configured.',
       };
     }
@@ -34,21 +36,13 @@ export const cloudinaryService = {
   },
 
   /**
-   * Upload placeholder stub for Phase 6 (VIP pass / celebrity media asset uploads)
+   * Upload image to Cloudinary using configured upload preset
    */
-  async uploadImage(_file: File): Promise<{ url: string | null; error: string | null }> {
-    const status = this.getStatus();
-    if (!status.isConfigured) {
-      return {
-        url: null,
-        error: 'Cloudinary upload service is pending configuration. Please provide a direct image URL in settings.',
-      };
-    }
-
-    // Server-signed direct upload implementation staged for Phase 6
+  async uploadImage(file: File): Promise<{ url: string | null; error: string | null }> {
+    const result = await uploadImageToCloudinary(file);
     return {
-      url: null,
-      error: 'Direct file upload will be enabled in Phase 6. Please specify image URL in the field above.',
+      url: result.secureUrl,
+      error: result.error,
     };
   },
 };

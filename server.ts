@@ -75,6 +75,26 @@ app.get('/api/services/status', (_req: Request, res: Response) => {
 });
 
 /**
+ * Cloudinary public configuration helper (non-sensitive: cloud name and preset only)
+ * Ensures frontend receives Vercel environment variables even if entered without VITE_ prefix
+ */
+app.get('/api/cloudinary/config', (_req: Request, res: Response) => {
+  const cloudName = process.env.VITE_CLOUDINARY_CLOUD_NAME || process.env.CLOUDINARY_CLOUD_NAME || '';
+  const uploadPreset = 
+    process.env.VITE_CLOUDINARY_UPLOAD_PRESET || 
+    process.env.CLOUDINARY_UPLOAD_PRESET || 
+    process.env.VITE_CLOUDINARY_PRESET || 
+    process.env.CLOUDINARY_PRESET || 
+    'Vipmeet';
+
+  res.json({
+    cloudName,
+    uploadPreset,
+    isConfigured: Boolean(cloudName && cloudName.length > 0),
+  });
+});
+
+/**
  * Server-side email delivery via Resend
  * Never exposes RESEND_API_KEY to browser
  */

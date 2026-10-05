@@ -125,9 +125,10 @@ export function SettingsForm() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!cloudinaryConfig.isConfigured) {
+    const currentConfig = getCloudinaryConfig();
+    if (!currentConfig.isConfigured) {
       setCloudinaryNotice(
-        'Cloudinary credentials are not configured in environment (VITE_CLOUDINARY_CLOUD_NAME). Please specify an image URL directly or configure Cloudinary for automated asset uploads.'
+        'Cloudinary cloud name is not set in environment (VITE_CLOUDINARY_CLOUD_NAME or CLOUDINARY_CLOUD_NAME). Please specify an image URL directly or set your Cloudinary variables.'
       );
       return;
     }
