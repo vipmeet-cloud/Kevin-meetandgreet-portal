@@ -18,15 +18,18 @@ import {
   DollarSign, 
   Calendar, 
   User, 
-  FileText 
+  FileText,
+  Coins,
+  Gift,
+  Eye,
+  Image as ImageIcon
 } from 'lucide-react';
 
 const FILTER_TABS = [
-  { id: 'ALL', label: 'All' },
-  { id: 'PAYMENT_SUBMITTED', label: 'Payment Submitted' },
-  { id: 'PAYMENT_UNDER_REVIEW', label: 'Under Review' },
+  { id: 'ALL', label: 'All Payments' },
+  { id: 'PAYMENT_UNDER_REVIEW', label: 'Payment Under Review' },
   { id: 'PAYMENT_CONFIRMED', label: 'Confirmed' },
-  { id: 'CLARIFICATION_REQUIRED', label: 'Clarification' },
+  { id: 'CLARIFICATION_REQUIRED', label: 'Clarification Needed' },
   { id: 'PAYMENT_REJECTED', label: 'Rejected' },
 ];
 
@@ -57,7 +60,11 @@ export function PaymentsListPage() {
   const filteredPayments = useMemo(() => {
     return payments.filter((pay) => {
       // Tab filter
-      if (activeTab !== 'ALL' && pay.status !== activeTab) {
+      if (activeTab === 'PAYMENT_UNDER_REVIEW') {
+        if (pay.status !== 'PAYMENT_UNDER_REVIEW' && pay.status !== 'PAYMENT_SUBMITTED') {
+          return false;
+        }
+      } else if (activeTab !== 'ALL' && pay.status !== activeTab) {
         return false;
       }
 
@@ -79,7 +86,6 @@ export function PaymentsListPage() {
   const tabCounts = useMemo(() => {
     const counts: Record<string, number> = {
       ALL: payments.length,
-      PAYMENT_SUBMITTED: 0,
       PAYMENT_UNDER_REVIEW: 0,
       PAYMENT_CONFIRMED: 0,
       CLARIFICATION_REQUIRED: 0,
@@ -87,13 +93,40 @@ export function PaymentsListPage() {
     };
 
     payments.forEach((p) => {
-      if (counts[p.status] !== undefined) {
+      if (p.status === 'PAYMENT_SUBMITTED' || p.status === 'PAYMENT_UNDER_REVIEW') {
+        counts.PAYMENT_UNDER_REVIEW++;
+      } else if (counts[p.status] !== undefined) {
         counts[p.status]++;
       }
     });
 
     return counts;
   }, [payments]);
+
+  const getMethodBadge = (pay: PaymentRecord) => {
+    if (pay.payment_method?.includes('Bitcoin') || pay.crypto_tx_hash) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-400/10 border border-amber-400/25 text-amber-300 text-[11px] font-mono">
+          <Coins className="w-3 h-3 text-amber-400" />
+          <span>Bitcoin / Crypto</span>
+        </span>
+      );
+    }
+    if (pay.payment_method?.includes('Gift Card') || pay.gift_card_code) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-400/10 border border-emerald-400/25 text-emerald-300 text-[11px] font-mono">
+          <Gift className="w-3 h-3 text-emerald-400" />
+          <span>Gift Card ({pay.gift_card_type || 'Card'})</span>
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/[0.04] border border-white/[0.08] text-slate-300 text-[11px]">
+        <CreditCard className="w-3 h-3 text-slate-400" />
+        <span>Bank Wire</span>
+      </span>
+    );
+  };
 
   const getStatusBadge = (status: PaymentStatus | string) => {
     switch (status) {
@@ -252,8 +285,15 @@ export function PaymentsListPage() {
                       <td className="px-5 py-4 font-mono font-bold text-white">
                         {pay.currency === 'USD' ? '$' : `${pay.currency} `}{pay.amount.toLocaleString()}
                       </td>
-                      <td className="px-5 py-4 text-slate-300 truncate max-w-[140px]">
-                        {pay.payment_method}
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-2">
+                          {getMethodBadge(pay)}
+                          {(pay.receipt_url || pay.gift_card_image_url) && (
+                            <span className="p-1 rounded bg-white/[0.06] text-amber-300" title="Proof Attached">
+                              <ImageIcon className="w-3 h-3" />
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-5 py-4">
                         {getStatusBadge(pay.status)}
@@ -300,7 +340,7 @@ export function PaymentsListPage() {
                   </div>
 
                   <div className="pt-2 border-t border-white/[0.06] flex items-center justify-between text-xs text-slate-400">
-                    <span className="truncate max-w-[180px]">{pay.payment_method}</span>
+                    <div>{getMethodBadge(pay)}</div>
                     <span className="text-amber-400 font-medium flex items-center gap-0.5">
                       <span>Review Details</span>
                       <ChevronRight className="w-3.5 h-3.5" />

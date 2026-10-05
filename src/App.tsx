@@ -28,83 +28,147 @@ import { Link } from './router/Router';
 
 function AppContent() {
   const { path } = useRouter();
+  const normalized = (path || '/').toLowerCase().replace(/\/+$/, '') || '/';
 
   // Determine current page component
   const renderRoute = () => {
     // Public routes
-    if (path === ROUTES.PUBLIC.HOME || path === '') {
+    if (normalized === '/' || normalized === '') {
       return <LandingPage />;
     }
-    if (path === ROUTES.PUBLIC.APPLY) {
+    if (normalized === '/apply') {
       return <ApplicationPage />;
     }
-    if (path === ROUTES.PUBLIC.APPLICATION_SUCCESS) {
+    if (normalized === '/application-success') {
       return <ApplicationSuccessPage />;
     }
-    if (path === ROUTES.PUBLIC.CONTINUE || path.startsWith('/continue/')) {
+    if (
+      normalized === '/continue' || 
+      normalized.startsWith('/continue/') || 
+      normalized === '/check' || 
+      normalized.startsWith('/check/') ||
+      normalized === '/status' ||
+      normalized.startsWith('/status/')
+    ) {
       return <ContinuationPage />;
     }
-    if (path === ROUTES.PUBLIC.PAYMENT || path.startsWith('/payment/')) {
+    if (
+      normalized === '/payment' || 
+      normalized.startsWith('/payment/') ||
+      normalized === '/pay' ||
+      normalized.startsWith('/pay/')
+    ) {
       return <PaymentSubmissionPage />;
     }
-    if (path === ROUTES.PUBLIC.VIP_PASS || path.startsWith('/vip-pass/')) {
+    if (
+      normalized === '/vip-pass' || 
+      normalized.startsWith('/vip-pass/') ||
+      normalized === '/pass' ||
+      normalized.startsWith('/pass/')
+    ) {
       return <VipPassPage />;
     }
-    if (path === ROUTES.PUBLIC.VERIFY || path.startsWith('/verify/') || path.startsWith('/verify-pass/')) {
+    if (
+      normalized === '/verify' || 
+      normalized === '/verify-pass' || 
+      normalized.startsWith('/verify/') || 
+      normalized.startsWith('/verify-pass/')
+    ) {
       return <PassVerificationPage />;
     }
-    if (path === ROUTES.PUBLIC.TERMS) {
+    if (normalized === '/terms') {
       return <TermsPage />;
     }
-    if (path === ROUTES.PUBLIC.PRIVACY) {
+    if (normalized === '/privacy') {
       return <PrivacyPage />;
     }
 
-    // Management routes
-    if (path === ROUTES.MANAGEMENT.LOGIN) {
+    // Management routes & common aliases
+    if (normalized === '/management/login' || normalized === '/admin/login' || normalized === '/login') {
       return <LoginPage />;
     }
-    if (path === ROUTES.MANAGEMENT.DASHBOARD) {
+    if (
+      normalized === '/management' || 
+      normalized === '/admin' || 
+      normalized === '/dashboard' ||
+      normalized === '/admin/dashboard'
+    ) {
       return <DashboardPage />;
     }
-    if (path === ROUTES.MANAGEMENT.APPLICATIONS) {
+    if (
+      normalized === '/management/applications' || 
+      normalized === '/admin/applications' ||
+      normalized === '/applications'
+    ) {
       return <ApplicationsListPage />;
     }
-    if (path.startsWith('/management/applications/')) {
+    if (
+      normalized.startsWith('/management/applications/') ||
+      normalized.startsWith('/admin/applications/') ||
+      normalized.startsWith('/applications/')
+    ) {
       return <ApplicationDetailPage />;
     }
-    if (path === ROUTES.MANAGEMENT.PAYMENTS) {
+    if (
+      normalized === '/management/payments' || 
+      normalized === '/admin/payments' ||
+      normalized === '/payments'
+    ) {
       return <PaymentsListPage />;
     }
-    if (path.startsWith('/management/payments/')) {
+    if (
+      normalized.startsWith('/management/payments/') ||
+      normalized.startsWith('/admin/payments/') ||
+      normalized.startsWith('/payments/')
+    ) {
       return <PaymentDetailPage />;
     }
-    if (path === ROUTES.MANAGEMENT.EMAIL_HISTORY) {
+    if (
+      normalized === '/management/email-history' || 
+      normalized === '/admin/email-history' ||
+      normalized === '/emails'
+    ) {
       return <EmailHistoryPage />;
     }
-    if (path === ROUTES.MANAGEMENT.AUDIT_LOG) {
+    if (
+      normalized === '/management/audit-log' || 
+      normalized === '/admin/audit-log' ||
+      normalized === '/audit'
+    ) {
       return <AuditLogPage />;
     }
-    if (path === ROUTES.MANAGEMENT.SETTINGS) {
+    if (
+      normalized === '/management/settings' || 
+      normalized === '/admin/settings' ||
+      normalized === '/settings'
+    ) {
       return <SettingsPage />;
     }
 
-    // 404 Fallback
+    // 404 Fallback with helpful navigation
     return (
       <div className="min-h-[70vh] flex items-center justify-center p-6 text-center">
-        <div className="max-w-md w-full p-8 rounded-3xl bg-[#121622] border border-white/[0.08] space-y-5">
+        <div className="max-w-md w-full p-8 rounded-3xl bg-[#121622] border border-white/[0.08] space-y-5 shadow-2xl">
           <span className="text-4xl font-serif text-[#D4AF37] block">404</span>
           <h2 className="text-xl font-serif text-white font-medium">Page Not Found</h2>
           <p className="text-xs text-slate-400 leading-relaxed">
-            The page you are looking for could not be found. Please check the web address or return home.
+            The page you are looking for does not exist or may have been moved.
           </p>
-          <Link
-            href="/"
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#D4AF37] hover:bg-[#E5C07B] text-black font-semibold text-xs uppercase tracking-widest rounded-xl transition-all"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Return to Event Home</span>
-          </Link>
+          <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+            <Link
+              href="/"
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-[#D4AF37] hover:bg-[#E5C07B] text-black font-semibold text-xs uppercase tracking-widest rounded-xl transition-all"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Event Home</span>
+            </Link>
+            <Link
+              href="/management"
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-white/[0.06] hover:bg-white/[0.1] text-white font-semibold text-xs uppercase tracking-widest rounded-xl transition-all"
+            >
+              <span>Management</span>
+            </Link>
+          </div>
         </div>
       </div>
     );

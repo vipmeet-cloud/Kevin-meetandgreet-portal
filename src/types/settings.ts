@@ -11,6 +11,22 @@ export type MeetGreetSettings = Database['public']['Tables']['meet_greet_setting
   cancellation_policy?: string | null;
   payment_instructions?: string | null;
   payment_methods?: Array<{ name: string; details: string }> | null;
+
+  // Bitcoin & Crypto Configuration
+  bitcoin_enabled?: boolean | null;
+  bitcoin_wallet_address?: string | null;
+  bitcoin_image_url?: string | null;
+  bitcoin_network?: string | null;
+  bitcoin_instructions?: string | null;
+
+  // Gift Card Configuration
+  gift_card_enabled?: boolean | null;
+  gift_card_types?: string | null;
+  gift_card_instructions?: string | null;
+
+  // Cloudinary Direct Config
+  cloudinary_cloud_name?: string | null;
+  cloudinary_upload_preset?: string | null;
 };
 export type MeetGreetSettingsInsert = Database['public']['Tables']['meet_greet_settings']['Insert'];
 export type MeetGreetSettingsUpdate = Database['public']['Tables']['meet_greet_settings']['Update'];
@@ -42,6 +58,22 @@ export interface SettingsFormData {
   refund_policy: string;
   cancellation_policy: string;
   payment_instructions: string;
+
+  // Bitcoin & Cryptocurrency
+  bitcoin_enabled: boolean;
+  bitcoin_wallet_address: string;
+  bitcoin_image_url: string;
+  bitcoin_network: string;
+  bitcoin_instructions: string;
+
+  // Gift Card
+  gift_card_enabled: boolean;
+  gift_card_types: string;
+  gift_card_instructions: string;
+
+  // Cloudinary Direct Config
+  cloudinary_cloud_name: string;
+  cloudinary_upload_preset: string;
 }
 
 export interface SettingsValidationErrors {

@@ -3,7 +3,9 @@ import { Link } from '../../router/Router';
 import { useSettings } from '../../context/SettingsContext';
 import { useAuth } from '../../context/AuthContext';
 import { applicationService } from '../../services/applicationService';
+import { paymentService } from '../../services/paymentService';
 import { ApplicationRecord, getPublicStatusLabel } from '../../types/application';
+import { PaymentRecord } from '../../types/payment';
 import { 
   Settings, 
   Calendar, 
@@ -29,13 +31,18 @@ export function DashboardOverview() {
   const { managementProfile } = useAuth();
 
   const [applications, setApplications] = useState<ApplicationRecord[]>([]);
+  const [payments, setPayments] = useState<PaymentRecord[]>([]);
   const [loadingApps, setLoadingApps] = useState(false);
 
   const fetchApps = async () => {
     setLoadingApps(true);
     try {
-      const res = await applicationService.fetchApplications();
-      setApplications(res.applications || []);
+      const [appRes, payRes] = await Promise.all([
+        applicationService.fetchApplications(),
+        paymentService.fetchPayments(),
+      ]);
+      setApplications(appRes.applications || []);
+      setPayments(payRes.payments || []);
     } catch {}
     finally {
       setLoadingApps(false);
@@ -47,12 +54,23 @@ export function DashboardOverview() {
   }, []);
 
   // Compute accurate metrics
+  const pendingPaymentsCount = payments.filter(
+    p => p.status === 'PAYMENT_SUBMITTED' || p.status === 'PAYMENT_UNDER_REVIEW'
+  ).length;
+
+  const appPaymentReviewCount = applications.filter(
+    a => a.status === 'PAYMENT_SUBMITTED' || a.status === 'PAYMENT_UNDER_REVIEW'
+  ).length;
+
   const metrics = {
     total: applications.length,
     underReview: applications.filter(a => a.status === 'UNDER_REVIEW').length,
     approved: applications.filter(a => a.status === 'APPROVED_AWAITING_COMPLETION' || a.status === 'APPROVED').length,
-    paymentsSubmitted: applications.filter(a => a.status === 'PAYMENT_SUBMITTED' || a.status === 'PAYMENT_UNDER_REVIEW').length,
-    paymentsConfirmed: applications.filter(a => a.status === 'PAYMENT_CONFIRMED_AWAITING_PASS').length,
+    paymentsSubmitted: Math.max(pendingPaymentsCount, appPaymentReviewCount),
+    paymentsConfirmed: Math.max(
+      payments.filter(p => p.status === 'PAYMENT_CONFIRMED').length,
+      applications.filter(a => (a.status as string) === 'PAYMENT_CONFIRMED_AWAITING_PASS' || (a.status as string) === 'PAYMENT_CONFIRMED').length
+    ),
   };
 
   const futureModules = [

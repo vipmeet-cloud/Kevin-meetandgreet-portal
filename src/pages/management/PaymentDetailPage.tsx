@@ -31,7 +31,9 @@ import {
   Eye,
   DollarSign,
   Sparkles,
-  QrCode
+  QrCode,
+  Coins,
+  Gift
 } from 'lucide-react';
 
 export function PaymentDetailPage() {
@@ -58,7 +60,11 @@ export function PaymentDetailPage() {
   const [isClarifying, setIsClarifying] = useState(false);
 
   const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [previewModalUrl, setPreviewModalUrl] = useState<string | null>(null);
+  const [previewModalTitle, setPreviewModalTitle] = useState('Payment Document');
   const [copiedRef, setCopiedRef] = useState(false);
+  const [copiedCryptoTx, setCopiedCryptoTx] = useState(false);
+  const [copiedGiftCode, setCopiedGiftCode] = useState(false);
 
   const loadPayment = async () => {
     if (!id) return;
@@ -93,6 +99,22 @@ export function PaymentDetailPage() {
       navigator.clipboard.writeText(text);
       setCopiedRef(true);
       setTimeout(() => setCopiedRef(false), 2000);
+    }
+  };
+
+  const handleCopyCrypto = (text: string) => {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+      setCopiedCryptoTx(true);
+      setTimeout(() => setCopiedCryptoTx(false), 2000);
+    }
+  };
+
+  const handleCopyGift = (text: string) => {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+      setCopiedGiftCode(true);
+      setTimeout(() => setCopiedGiftCode(false), 2000);
     }
   };
 
@@ -397,6 +419,165 @@ export function PaymentDetailPage() {
                 </div>
               </div>
             </div>
+
+            {/* Cryptocurrency Verification Card (if Bitcoin/Crypto) */}
+            {(payment.payment_method?.includes('Bitcoin') || payment.crypto_tx_hash) && (
+              <div className="p-6 rounded-3xl bg-[#0C0F17] border border-amber-500/30 space-y-4 shadow-xl animate-fadeIn">
+                <div className="border-b border-white/[0.06] pb-3 flex items-center justify-between">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-white font-mono flex items-center gap-2">
+                    <Coins className="w-4 h-4 text-amber-400" />
+                    <span>Cryptocurrency Transaction Verification</span>
+                  </h3>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-amber-400/20 text-amber-300 font-bold">
+                    BTC / Blockchain
+                  </span>
+                </div>
+
+                <div className="space-y-3 text-xs font-mono">
+                  <div className="p-3.5 rounded-2xl bg-black/40 border border-white/[0.04] space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] uppercase text-slate-500">Transaction ID / Hash (TXID)</span>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyCrypto(payment.crypto_tx_hash || payment.payment_reference)}
+                        className="text-slate-400 hover:text-white flex items-center gap-1 text-[11px]"
+                      >
+                        {copiedCryptoTx ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-400" />
+                            <span className="text-emerald-400">Copied</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5" />
+                            <span>Copy TXID</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                    <div className="text-amber-300 font-bold break-all select-all pt-0.5">
+                      {payment.crypto_tx_hash || payment.payment_reference}
+                    </div>
+                    <div className="pt-1.5 flex items-center gap-2">
+                      <a
+                        href={`https://mempool.space/tx/${payment.crypto_tx_hash || payment.payment_reference}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 text-xs text-amber-400 hover:text-amber-300 font-semibold"
+                      >
+                        <span>Check on Mempool / Explorer</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
+                  </div>
+
+                  {payment.crypto_wallet_address && (
+                    <div className="p-3.5 rounded-2xl bg-black/40 border border-white/[0.04] space-y-1">
+                      <span className="text-[10px] uppercase text-slate-500 block">Applicant Sender Address</span>
+                      <span className="text-slate-200 font-mono break-all block select-all">
+                        {payment.crypto_wallet_address}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Gift Card Verification Card (if Gift Card) */}
+            {(payment.payment_method?.includes('Gift Card') || payment.gift_card_code) && (
+              <div className="p-6 rounded-3xl bg-[#0C0F17] border border-emerald-500/30 space-y-4 shadow-xl animate-fadeIn">
+                <div className="border-b border-white/[0.06] pb-3 flex items-center justify-between">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-white font-mono flex items-center gap-2">
+                    <Gift className="w-4 h-4 text-emerald-400" />
+                    <span>Gift Card Verification Details</span>
+                  </h3>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-400/20 text-emerald-300 font-bold">
+                    {payment.gift_card_type || 'Gift Card'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs font-mono">
+                  <div className="p-3.5 rounded-2xl bg-black/40 border border-white/[0.04] space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] uppercase text-slate-500">Claim Code / Number</span>
+                      {payment.gift_card_code && (
+                        <button
+                          type="button"
+                          onClick={() => handleCopyGift(payment.gift_card_code!)}
+                          className="text-slate-400 hover:text-white flex items-center gap-1 text-[11px]"
+                        >
+                          {copiedGiftCode ? (
+                            <>
+                              <Check className="w-3.5 h-3.5 text-emerald-400" />
+                              <span className="text-emerald-400">Copied</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3.5 h-3.5" />
+                              <span>Copy Code</span>
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
+                    <span className="text-emerald-300 font-bold text-sm block select-all">
+                      {payment.gift_card_code || '—'}
+                    </span>
+                  </div>
+
+                  <div className="p-3.5 rounded-2xl bg-black/40 border border-white/[0.04] space-y-1">
+                    <span className="text-[10px] uppercase text-slate-500 block">Security PIN</span>
+                    <span className="text-white font-bold text-sm block select-all">
+                      {payment.gift_card_pin || 'No PIN Required / N/A'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Gift Card Photos */}
+                {(payment.gift_card_image_url || payment.gift_card_back_image_url) && (
+                  <div className="space-y-2 pt-2">
+                    <span className="text-[10px] font-mono uppercase text-slate-500 block">Uploaded Gift Card Photos</span>
+                    <div className="grid grid-cols-2 gap-3">
+                      {payment.gift_card_image_url && (
+                        <div
+                          onClick={() => {
+                            setPreviewModalUrl(payment.gift_card_image_url || null);
+                            setPreviewModalTitle('Gift Card Front');
+                            setShowReceiptModal(true);
+                          }}
+                          className="relative rounded-2xl overflow-hidden border border-white/[0.1] bg-black/40 max-h-48 cursor-pointer group p-2 text-center"
+                        >
+                          <img
+                            src={payment.gift_card_image_url}
+                            alt="Gift Card Front"
+                            className="max-h-40 w-auto mx-auto object-contain rounded-xl"
+                          />
+                          <span className="text-[10px] text-slate-400 block mt-1">Front Face (Tap to Zoom)</span>
+                        </div>
+                      )}
+
+                      {payment.gift_card_back_image_url && (
+                        <div
+                          onClick={() => {
+                            setPreviewModalUrl(payment.gift_card_back_image_url || null);
+                            setPreviewModalTitle('Gift Card Back');
+                            setShowReceiptModal(true);
+                          }}
+                          className="relative rounded-2xl overflow-hidden border border-white/[0.1] bg-black/40 max-h-48 cursor-pointer group p-2 text-center"
+                        >
+                          <img
+                            src={payment.gift_card_back_image_url}
+                            alt="Gift Card Back"
+                            className="max-h-40 w-auto mx-auto object-contain rounded-xl"
+                          />
+                          <span className="text-[10px] text-slate-400 block mt-1">Back with Barcode & PIN</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Uploaded Receipt Viewer (Section 18) */}
             <div className="p-6 rounded-3xl bg-[#0C0F17] border border-white/[0.08] space-y-4 shadow-xl">
@@ -771,24 +952,38 @@ export function PaymentDetailPage() {
         </div>
       )}
 
-      {/* ENLARGED RECEIPT MODAL */}
-      {showReceiptModal && payment.receipt_url && (
+      {/* ENLARGED RECEIPT / CARD MODAL */}
+      {showReceiptModal && (previewModalUrl || payment.receipt_url) && (
         <div 
-          onClick={() => setShowReceiptModal(false)}
+          onClick={() => {
+            setShowReceiptModal(false);
+            setPreviewModalUrl(null);
+          }}
           className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4 cursor-pointer"
         >
-          <div className="relative max-w-3xl max-h-[90vh] p-2 bg-[#0C0F17] rounded-3xl border border-white/[0.1] shadow-2xl">
-            <button
-              type="button"
-              onClick={() => setShowReceiptModal(false)}
-              className="absolute top-4 right-4 p-2 bg-black/60 rounded-full text-white hover:bg-black transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
+          <div 
+            onClick={(e) => e.stopPropagation()} 
+            className="relative max-w-3xl max-h-[90vh] p-4 bg-[#0C0F17] rounded-3xl border border-white/[0.1] shadow-2xl space-y-3 cursor-default"
+          >
+            <div className="flex items-center justify-between pb-2 border-b border-white/[0.06]">
+              <span className="text-xs font-mono font-bold uppercase tracking-wider text-amber-300">
+                {previewModalTitle}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowReceiptModal(false);
+                  setPreviewModalUrl(null);
+                }}
+                className="p-1.5 bg-black/60 rounded-full text-slate-400 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
             <img
-              src={payment.receipt_url}
-              alt="Full receipt"
-              className="max-h-[85vh] w-auto object-contain rounded-2xl"
+              src={previewModalUrl || payment.receipt_url!}
+              alt="Enlarged Document"
+              className="max-h-[75vh] w-auto mx-auto object-contain rounded-2xl"
             />
           </div>
         </div>

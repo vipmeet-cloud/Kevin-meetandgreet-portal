@@ -40,6 +40,16 @@ function saveStoredLocalSettings(data: any): MeetGreetSettings {
     refund_policy: data.refund_policy || 'Full refund available up to 72 hours prior to scheduled session.',
     cancellation_policy: data.cancellation_policy || 'Cancellations within 48 hours are subject to management review.',
     payment_instructions: data.payment_instructions || 'Please remit payment via bank transfer using your reference code.',
+    // Bitcoin & Cryptocurrency
+    bitcoin_enabled: data.bitcoin_enabled !== undefined ? data.bitcoin_enabled : true,
+    bitcoin_wallet_address: data.bitcoin_wallet_address || 'bc1q9x405gxy5n0yrf2493p83kkfjhx0wlhm7q885g',
+    bitcoin_image_url: data.bitcoin_image_url || null,
+    bitcoin_network: data.bitcoin_network || 'Bitcoin (BTC)',
+    bitcoin_instructions: data.bitcoin_instructions || 'Transfer the exact fee amount to our verified Bitcoin wallet address below or scan the QR code. Keep your Transaction ID (TXID) for confirmation.',
+    // Gift Card
+    gift_card_enabled: data.gift_card_enabled !== undefined ? data.gift_card_enabled : true,
+    gift_card_types: data.gift_card_types || 'Apple Gift Card, Steam, Amazon, Vanilla Visa, Razer Gold',
+    gift_card_instructions: data.gift_card_instructions || 'Purchase an approved gift card matching your application fee amount. Enter the claim code / PIN and upload clear photos of the front and back of the card.',
   };
   try {
     localStorage.setItem(LOCAL_SETTINGS_KEY, JSON.stringify(record));
@@ -142,7 +152,33 @@ export async function saveMeetGreetSettings(
     refund_policy: formData.refund_policy?.trim() || null,
     cancellation_policy: formData.cancellation_policy?.trim() || null,
     payment_instructions: formData.payment_instructions?.trim() || null,
+
+    // Bitcoin & Cryptocurrency
+    bitcoin_enabled: formData.bitcoin_enabled ?? true,
+    bitcoin_wallet_address: formData.bitcoin_wallet_address?.trim() || null,
+    bitcoin_image_url: formData.bitcoin_image_url?.trim() || null,
+    bitcoin_network: formData.bitcoin_network?.trim() || 'Bitcoin (BTC)',
+    bitcoin_instructions: formData.bitcoin_instructions?.trim() || null,
+
+    // Gift Card
+    gift_card_enabled: formData.gift_card_enabled ?? true,
+    gift_card_types: formData.gift_card_types?.trim() || 'Apple Gift Card, Steam, Amazon, Vanilla Visa, Razer Gold',
+    gift_card_instructions: formData.gift_card_instructions?.trim() || null,
+
+    // Cloudinary Direct Config
+    cloudinary_cloud_name: formData.cloudinary_cloud_name?.trim() || null,
+    cloudinary_upload_preset: formData.cloudinary_upload_preset?.trim() || 'Vipmeet',
   };
+
+  // If user provided Cloudinary details in settings, persist to local storage config
+  if (typeof window !== 'undefined') {
+    if (formData.cloudinary_cloud_name) {
+      localStorage.setItem('aura_vip_cloudinary_cloud_name', formData.cloudinary_cloud_name.trim());
+    }
+    if (formData.cloudinary_upload_preset) {
+      localStorage.setItem('aura_vip_cloudinary_upload_preset', formData.cloudinary_upload_preset.trim());
+    }
+  }
 
   const localSaved = saveStoredLocalSettings({ ...payload, id: existingId });
 

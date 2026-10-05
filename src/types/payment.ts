@@ -25,6 +25,15 @@ export interface PaymentRecord {
   management_note: string | null;
   created_at: string;
   updated_at: string;
+  // Cryptocurrency details
+  crypto_wallet_address?: string | null;
+  crypto_tx_hash?: string | null;
+  // Gift Card details
+  gift_card_type?: string | null;
+  gift_card_code?: string | null;
+  gift_card_pin?: string | null;
+  gift_card_image_url?: string | null;
+  gift_card_back_image_url?: string | null;
   // Augmented UI join fields
   applicant_name?: string;
   applicant_email?: string;
@@ -57,6 +66,15 @@ export interface PaymentSubmissionData {
   amount: number;
   currency: string;
   terms_agreed?: boolean;
+  // Cryptocurrency details
+  crypto_wallet_address?: string | null;
+  crypto_tx_hash?: string | null;
+  // Gift card details
+  gift_card_type?: string | null;
+  gift_card_code?: string | null;
+  gift_card_pin?: string | null;
+  gift_card_image_url?: string | null;
+  gift_card_back_image_url?: string | null;
 }
 
 export interface PublicFeeConfig {
@@ -71,6 +89,16 @@ export interface PublicFeeConfig {
   payment_method_name?: string;
   payment_instructions?: string;
   is_configured: boolean;
+  // Cryptocurrency & Bitcoin config
+  bitcoin_enabled?: boolean;
+  bitcoin_wallet_address?: string;
+  bitcoin_image_url?: string;
+  bitcoin_network?: string;
+  bitcoin_instructions?: string;
+  // Gift card config
+  gift_card_enabled?: boolean;
+  gift_card_types?: string;
+  gift_card_instructions?: string;
 }
 
 export interface ApplicationTokenRecord {
