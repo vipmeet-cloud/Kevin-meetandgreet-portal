@@ -117,13 +117,13 @@ export function AuditLogPage() {
         </div>
 
         {/* Action filter pills */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 border-b border-white/[0.06] text-xs">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-2 border-b border-white/[0.06] text-xs flex-nowrap scrollbar-none">
           {ACTION_FILTERS.map((f) => (
             <button
               key={f.id}
               type="button"
               onClick={() => setActiveAction(f.id)}
-              className={`min-h-[36px] px-3 py-1.5 rounded-lg font-medium whitespace-nowrap transition-all cursor-pointer ${
+              className={`min-h-[36px] px-3 py-1.5 rounded-lg font-medium whitespace-nowrap transition-all cursor-pointer shrink-0 ${
                 activeAction === f.id
                   ? 'bg-white text-slate-950 font-semibold'
                   : 'text-slate-400 hover:text-white hover:bg-white/[0.04]'
@@ -141,8 +141,8 @@ export function AuditLogPage() {
             <p>Loading audit logs from database...</p>
           </div>
         ) : filteredLogs.length > 0 ? (
-          <div className="rounded-2xl bg-[#0C0F17] border border-white/[0.08] overflow-hidden shadow-xl">
-            <table className="w-full text-left text-xs">
+          <div className="rounded-2xl bg-[#0C0F17] border border-white/[0.08] overflow-x-auto shadow-xl">
+            <table className="w-full min-w-[700px] text-left text-xs">
               <thead>
                 <tr className="border-b border-white/[0.06] bg-white/[0.02] text-slate-400 font-mono text-[11px] uppercase tracking-wider">
                   <th className="px-5 py-3.5 font-medium">Timestamp</th>

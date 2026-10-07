@@ -188,7 +188,7 @@ export function DashboardOverview() {
         
         {/* Recent Applications (8 cols) */}
         <div className="lg:col-span-8 p-6 rounded-3xl bg-[#0E1118] border border-white/[0.08] space-y-5 shadow-xl">
-          <div className="flex items-center justify-between pb-3 border-b border-white/[0.06]">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/[0.06]">
             <div>
               <h3 className="text-base font-semibold text-white">
                 Recent Guest Applications

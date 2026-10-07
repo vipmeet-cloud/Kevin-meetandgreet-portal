@@ -238,7 +238,7 @@ export function PaymentDetailPage() {
 
   return (
     <ManagementLayout
-      title={`Payment Review: ${payment.payment_reference}`}
+      title={`Payment Review: ${payment.payment_reference.length > 20 ? payment.payment_reference.slice(0, 16) + '...' : payment.payment_reference}`}
       subtitle="Reconcile applicant wire transaction, inspect transfer proof, and execute administrative determination."
     >
       <div className="space-y-6 animate-fadeIn pb-12">
@@ -247,19 +247,19 @@ export function PaymentDetailPage() {
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
           <Link
             href="/management/payments"
-            className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-white transition-colors"
+            className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-white transition-colors py-1 shrink-0"
           >
             <ArrowLeft className="w-4 h-4" />
             <span>Back to Payments Roster</span>
           </Link>
 
           {/* Action CTAs: Confirm, Reject, Clarification */}
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 w-full sm:w-auto">
             {payment.status !== 'PAYMENT_CONFIRMED' && (
               <button
                 type="button"
                 onClick={() => setShowConfirmModal(true)}
-                className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 active:scale-[0.98] text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
+                className="w-full sm:w-auto justify-center min-h-[44px] px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 active:scale-[0.98] text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
               >
                 <CheckCircle2 className="w-4 h-4" />
                 <span>Confirm Payment</span>
@@ -269,7 +269,7 @@ export function PaymentDetailPage() {
             <button
               type="button"
               onClick={() => setShowClarifyModal(true)}
-              className="px-4 py-2.5 bg-white/[0.06] hover:bg-white/[0.1] active:scale-[0.98] text-white border border-white/[0.1] font-semibold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+              className="w-full sm:w-auto justify-center min-h-[44px] px-4 py-2.5 bg-white/[0.06] hover:bg-white/[0.1] active:scale-[0.98] text-white border border-white/[0.1] font-semibold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
             >
               <HelpCircle className="w-4 h-4 text-indigo-400" />
               <span>Request Clarification</span>
@@ -279,7 +279,7 @@ export function PaymentDetailPage() {
               <button
                 type="button"
                 onClick={() => setShowRejectModal(true)}
-                className="px-4 py-2.5 bg-rose-500/10 hover:bg-rose-500/20 active:scale-[0.98] text-rose-300 border border-rose-500/30 font-semibold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                className="w-full sm:w-auto justify-center min-h-[44px] px-4 py-2.5 bg-rose-500/10 hover:bg-rose-500/20 active:scale-[0.98] text-rose-300 border border-rose-500/30 font-semibold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
               >
                 <XCircle className="w-4 h-4" />
                 <span>Reject Payment</span>
@@ -385,15 +385,15 @@ export function PaymentDetailPage() {
                 <span className="text-xs font-mono text-slate-500">ID: {payment.id.substring(0, 8)}...</span>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 text-xs font-mono">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-xs font-mono">
                 <div className="p-3.5 rounded-2xl bg-black/40 border border-white/[0.04]">
                   <span className="text-[10px] uppercase text-slate-500 block">Payment Reference</span>
-                  <div className="flex items-center justify-between mt-1">
-                    <span className="font-bold text-amber-300 text-sm tracking-wider">{payment.payment_reference}</span>
+                  <div className="flex items-center justify-between gap-2 mt-1">
+                    <span className="font-bold text-amber-300 text-xs sm:text-sm tracking-wider break-all">{payment.payment_reference}</span>
                     <button
                       type="button"
                       onClick={() => handleCopyRef(payment.payment_reference)}
-                      className="p-1 text-slate-400 hover:text-white"
+                      className="p-1 text-slate-400 hover:text-white shrink-0"
                       title="Copy Payment Reference"
                     >
                       {copiedRef ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}

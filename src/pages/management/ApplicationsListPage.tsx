@@ -166,11 +166,11 @@ export function ApplicationsListPage() {
             />
           </div>
 
-          <div className="flex items-center gap-2 self-end sm:self-auto">
+          <div className="flex items-center gap-2 self-stretch sm:self-auto justify-end">
             <button
               type="button"
               onClick={loadApplications}
-              className="min-h-[44px] px-3.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer border border-white/[0.06]"
+              className="min-h-[44px] px-3.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer border border-white/[0.06] shrink-0"
               title="Refresh Roster"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
@@ -181,7 +181,7 @@ export function ApplicationsListPage() {
         </div>
 
         {/* Status Filter Tabs */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 border-b border-white/[0.06] text-xs">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-2 border-b border-white/[0.06] text-xs flex-nowrap scrollbar-none">
           {FILTER_TABS.map((tab) => {
             const count = tabCounts[tab.id] || 0;
             const isActive = activeTab === tab.id;
@@ -191,7 +191,7 @@ export function ApplicationsListPage() {
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveTab(tab.id)}
-                className={`min-h-[38px] px-3.5 py-1.5 rounded-lg font-medium whitespace-nowrap transition-all flex items-center gap-2 cursor-pointer ${
+                className={`min-h-[38px] px-3.5 py-1.5 rounded-lg font-medium whitespace-nowrap transition-all flex items-center gap-2 cursor-pointer shrink-0 ${
                   isActive
                     ? 'bg-white text-slate-950 font-semibold shadow-sm'
                     : 'text-slate-400 hover:text-white hover:bg-white/[0.04]'
@@ -222,8 +222,8 @@ export function ApplicationsListPage() {
           <div className="space-y-3">
             
             {/* Desktop Table View */}
-            <div className="hidden md:block rounded-2xl bg-[#0C0F17] border border-white/[0.08] overflow-hidden shadow-xl">
-              <table className="w-full text-left text-xs">
+            <div className="hidden md:block rounded-2xl bg-[#0C0F17] border border-white/[0.08] overflow-x-auto shadow-xl">
+              <table className="w-full min-w-[700px] text-left text-xs">
                 <thead>
                   <tr className="border-b border-white/[0.06] bg-white/[0.02] text-slate-400 font-mono text-[11px] uppercase tracking-wider">
                     <th className="px-5 py-3.5 font-medium">Reference</th>

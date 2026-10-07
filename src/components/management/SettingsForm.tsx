@@ -1381,7 +1381,7 @@ export function SettingsForm() {
           * Modifications are committed directly to Supabase Postgres via authenticated RLS policies.
         </div>
 
-        <div className="flex items-center gap-3 w-full sm:w-auto">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
           <a
             href="/"
             target="_blank"

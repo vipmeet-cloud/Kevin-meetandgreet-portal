@@ -296,12 +296,12 @@ export function ApplicationDetailPage() {
                 type="text"
                 readOnly
                 value={`${typeof window !== 'undefined' ? window.location.origin : ''}/continue/${application.continuation_token}`}
-                className="flex-1 px-4 py-2.5 bg-black/60 border border-white/[0.1] rounded-xl text-xs font-mono text-emerald-300 select-all"
+                className="flex-1 min-w-0 w-full px-4 py-2.5 bg-black/60 border border-white/[0.1] rounded-xl text-xs font-mono text-emerald-300 select-all truncate"
               />
               <button
                 type="button"
                 onClick={() => handleCopyContinuationLink(`${window.location.origin}/continue/${application.continuation_token}`)}
-                className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 font-semibold text-xs flex items-center justify-center gap-1.5 cursor-pointer shrink-0 transition-all"
+                className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 font-semibold text-xs flex items-center justify-center gap-1.5 cursor-pointer shrink-0 transition-all"
               >
                 {copiedLink ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                 <span>{copiedLink ? 'Copied' : 'Copy Link'}</span>

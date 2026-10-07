@@ -111,8 +111,13 @@ export function RouterProvider({ children }: RouterProviderProps) {
       window.history.pushState({}, '', to);
     }
 
-    updatePathAndParams(to);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    // Schedule path update asynchronously to prevent setState-in-render issues
+    setTimeout(() => {
+      updatePathAndParams(to);
+      try {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } catch {}
+    }, 0);
   }, [updatePathAndParams]);
 
   useEffect(() => {
@@ -121,7 +126,6 @@ export function RouterProvider({ children }: RouterProviderProps) {
     };
 
     window.addEventListener('popstate', handlePopState);
-    updatePathAndParams(window.location.pathname || '/');
 
     return () => {
       window.removeEventListener('popstate', handlePopState);

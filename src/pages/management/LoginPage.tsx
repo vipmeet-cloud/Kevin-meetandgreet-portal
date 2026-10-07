@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from '../../router/Router';
 import { useAuth } from '../../context/AuthContext';
 import { isSupabaseConfigured } from '../../services/supabase';
@@ -14,10 +14,25 @@ export function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
-  // If already authorized, navigate directly to management dashboard
+  // If already authorized, navigate to management dashboard asynchronously
+  useEffect(() => {
+    if (isAuthorizedManagement) {
+      const timer = setTimeout(() => {
+        navigate('/management', { replace: true });
+      }, 0);
+      return () => clearTimeout(timer);
+    }
+  }, [isAuthorizedManagement, navigate]);
+
   if (isAuthorizedManagement) {
-    navigate('/management', { replace: true });
-    return null;
+    return (
+      <div className="min-h-[85vh] flex items-center justify-center p-4">
+        <div className="text-center space-y-3 font-mono text-xs text-slate-400">
+          <Loader2 className="w-6 h-6 animate-spin text-amber-400 mx-auto" />
+          <p>Redirecting to Management Console...</p>
+        </div>
+      </div>
+    );
   }
 
   const handleFillCredentials = () => {

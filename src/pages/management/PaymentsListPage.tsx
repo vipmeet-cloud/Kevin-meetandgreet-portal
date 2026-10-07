@@ -191,11 +191,24 @@ export function PaymentsListPage() {
             />
           </div>
 
-          <div className="flex items-center gap-2 self-end sm:self-auto">
+          <div className="flex items-center gap-2 self-stretch sm:self-auto justify-end">
+            <button
+              type="button"
+              onClick={() => {
+                paymentService.seedSamplePayments();
+                loadPayments();
+              }}
+              className="min-h-[44px] px-3.5 rounded-xl bg-amber-400/10 hover:bg-amber-400/20 text-amber-300 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer border border-amber-400/25 shrink-0"
+              title="Add Demo Payment Records"
+            >
+              <Coins className="w-3.5 h-3.5 text-amber-400" />
+              <span>+ Add Demo Payments</span>
+            </button>
+
             <button
               type="button"
               onClick={loadPayments}
-              className="min-h-[44px] px-3.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer border border-white/[0.06]"
+              className="min-h-[44px] px-3.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer border border-white/[0.06] shrink-0"
               title="Refresh Payments"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
@@ -206,7 +219,7 @@ export function PaymentsListPage() {
         </div>
 
         {/* Status Filter Tabs */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 border-b border-white/[0.06] text-xs">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-2 border-b border-white/[0.06] text-xs flex-nowrap scrollbar-none">
           {FILTER_TABS.map((tab) => {
             const count = tabCounts[tab.id] || 0;
             const isActive = activeTab === tab.id;
@@ -216,7 +229,7 @@ export function PaymentsListPage() {
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveTab(tab.id)}
-                className={`min-h-[38px] px-3.5 py-1.5 rounded-lg font-medium whitespace-nowrap transition-all flex items-center gap-2 cursor-pointer ${
+                className={`min-h-[38px] px-3.5 py-1.5 rounded-lg font-medium whitespace-nowrap transition-all flex items-center gap-2 cursor-pointer shrink-0 ${
                   isActive
                     ? 'bg-white text-slate-950 font-semibold shadow-sm'
                     : 'text-slate-400 hover:text-white hover:bg-white/[0.04]'
@@ -247,8 +260,8 @@ export function PaymentsListPage() {
           <div className="space-y-3">
             
             {/* Desktop Table View */}
-            <div className="hidden md:block rounded-2xl bg-[#0C0F17] border border-white/[0.08] overflow-hidden shadow-xl">
-              <table className="w-full text-left text-xs">
+            <div className="hidden md:block rounded-2xl bg-[#0C0F17] border border-white/[0.08] overflow-x-auto shadow-xl">
+              <table className="w-full min-w-[760px] text-left text-xs">
                 <thead>
                   <tr className="border-b border-white/[0.06] bg-white/[0.02] text-slate-400 font-mono text-[11px] uppercase tracking-wider">
                     <th className="px-5 py-3.5 font-medium">Payment Ref</th>
@@ -319,29 +332,29 @@ export function PaymentsListPage() {
                 <div
                   key={pay.id}
                   onClick={() => navigate(`/management/payments/${pay.id}`)}
-                  className="p-5 rounded-2xl bg-[#0C0F17] border border-white/[0.08] hover:border-amber-400/40 active:scale-[0.99] transition-all space-y-3 cursor-pointer shadow-lg"
+                  className="p-4 sm:p-5 rounded-2xl bg-[#0C0F17] border border-white/[0.08] hover:border-amber-400/40 active:scale-[0.99] transition-all space-y-3 cursor-pointer shadow-lg w-full overflow-hidden"
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono font-bold text-amber-300 text-sm tracking-wider">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono font-bold text-amber-300 text-xs sm:text-sm tracking-wider truncate max-w-[170px]">
                       {pay.payment_reference}
                     </span>
-                    {getStatusBadge(pay.status)}
+                    <div className="shrink-0">{getStatusBadge(pay.status)}</div>
                   </div>
 
                   <div className="space-y-1">
-                    <h4 className="text-sm font-semibold text-white">
+                    <h4 className="text-sm font-semibold text-white truncate">
                       {pay.application?.full_name || 'Verified Applicant'}
                     </h4>
-                    <div className="flex items-center gap-2 text-xs text-slate-400 font-mono">
-                      <span>Ref: {pay.application?.reference_code}</span>
+                    <div className="flex items-center gap-2 text-xs text-slate-400 font-mono flex-wrap">
+                      <span className="truncate">Ref: {pay.application?.reference_code || 'VIP'}</span>
                       <span>·</span>
                       <span className="text-white font-bold">{pay.currency} {pay.amount.toLocaleString()}</span>
                     </div>
                   </div>
 
-                  <div className="pt-2 border-t border-white/[0.06] flex items-center justify-between text-xs text-slate-400">
-                    <div>{getMethodBadge(pay)}</div>
-                    <span className="text-amber-400 font-medium flex items-center gap-0.5">
+                  <div className="pt-2 border-t border-white/[0.06] flex items-center justify-between gap-2 text-xs text-slate-400 flex-wrap">
+                    <div className="shrink-0">{getMethodBadge(pay)}</div>
+                    <span className="text-amber-400 font-medium flex items-center gap-0.5 shrink-0 ml-auto">
                       <span>Review Details</span>
                       <ChevronRight className="w-3.5 h-3.5" />
                     </span>
@@ -352,14 +365,29 @@ export function PaymentsListPage() {
 
           </div>
         ) : (
-          <div className="p-12 text-center rounded-2xl bg-[#0C0F17] border border-white/[0.06] space-y-3">
+          <div className="p-8 sm:p-12 text-center rounded-2xl bg-[#0C0F17] border border-white/[0.06] space-y-4">
             <CreditCard className="w-10 h-10 text-slate-600 mx-auto" />
-            <h4 className="text-sm font-semibold text-white">No payment records found</h4>
-            <p className="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed">
-              {searchQuery
-                ? `No payment transactions match "${searchQuery}".`
-                : 'No payments currently registered in this filter view.'}
-            </p>
+            <div className="space-y-1">
+              <h4 className="text-sm font-semibold text-white">No payment records found</h4>
+              <p className="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed">
+                {searchQuery
+                  ? `No payment transactions match "${searchQuery}".`
+                  : 'No payments currently registered in this filter view. Click below to load demo payment records.'}
+              </p>
+            </div>
+            <div>
+              <button
+                type="button"
+                onClick={() => {
+                  paymentService.seedSamplePayments();
+                  loadPayments();
+                }}
+                className="px-4 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs uppercase tracking-wider transition-colors inline-flex items-center gap-2 cursor-pointer shadow-md"
+              >
+                <Coins className="w-4 h-4 text-slate-950" />
+                <span>Load Sample VIP Payments</span>
+              </button>
+            </div>
           </div>
         )}
 

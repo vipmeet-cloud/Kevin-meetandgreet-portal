@@ -325,7 +325,51 @@ export const paymentService = {
     }
 
     const devPayments = getStoredDevPayments();
-    return devPayments.find(p => p.application_id === applicationId) || null;
+    const local = devPayments.find(p => p.application_id === applicationId);
+    if (local) return local;
+
+    // Check if application has active payment status
+    try {
+      const { application } = await applicationService.fetchApplicationById(applicationId);
+      if (application && [
+        'PAYMENT_SUBMITTED', 
+        'PAYMENT_UNDER_REVIEW', 
+        'PAYMENT_CONFIRMED', 
+        'PAYMENT_CONFIRMED_AWAITING_PASS', 
+        'CLARIFICATION_REQUIRED', 
+        'PAYMENT_CLARIFICATION_REQUIRED', 
+        'PAYMENT_REJECTED'
+      ].includes(application.status)) {
+        return {
+          id: `pay_${application.id}`,
+          application_id: application.id,
+          amount: 2500,
+          currency: 'USD',
+          payment_method: 'Bank Wire Transfer',
+          payment_reference: `WIRE-${application.reference_code.replace('VIP-', '')}`,
+          payment_date: application.updated_at ? application.updated_at.split('T')[0] : new Date().toISOString().split('T')[0],
+          receipt_url: null,
+          receipt_public_id: null,
+          status: (application.status === 'PAYMENT_CONFIRMED_AWAITING_PASS' ? 'PAYMENT_CONFIRMED' : application.status as PaymentStatus),
+          submitted_at: application.updated_at || application.created_at,
+          reviewed_at: application.status === 'PAYMENT_CONFIRMED_AWAITING_PASS' ? application.updated_at : null,
+          reviewed_by: null,
+          rejection_reason: application.decline_reason || null,
+          management_note: application.information_requested_message || null,
+          created_at: application.updated_at || application.created_at,
+          updated_at: application.updated_at || application.created_at,
+          applicant_name: application.full_name,
+          applicant_email: application.email,
+          application_reference: application.reference_code,
+          preferred_date: application.preferred_date,
+          preferred_session: application.preferred_session,
+          attendee_count: application.attendee_count,
+          application,
+        };
+      }
+    } catch {}
+
+    return null;
   },
 
   async getPaymentForApplication(applicationId: string): Promise<PaymentRecord | null> {
@@ -369,15 +413,43 @@ export const paymentService = {
     }
 
     const devPayments = getStoredDevPayments();
-    const found = devPayments.find(p => p.id === paymentId) || null;
+    let found = devPayments.find(p => p.id === paymentId) || null;
+
+    if (!found) {
+      // Check all payments to see if synthesized or in applications
+      const all = await this.fetchAllPayments();
+      found = all.payments.find(p => p.id === paymentId || p.payment_reference === paymentId) || null;
+    }
+
+    if (found && !found.application && found.application_id) {
+      try {
+        const { application } = await applicationService.fetchApplicationById(found.application_id);
+        if (application) {
+          found = {
+            ...found,
+            application,
+            applicant_name: application.full_name,
+            applicant_email: application.email,
+            application_reference: application.reference_code,
+            preferred_date: application.preferred_date,
+            preferred_session: application.preferred_session,
+            attendee_count: application.attendee_count,
+          };
+        }
+      } catch {}
+    }
+
     return { payment: found };
   },
 
   /**
    * Fetch all payments for Management Dashboard
+   * Consolidates Supabase records, local device storage, and application payment workflows
    */
   async fetchAllPayments(): Promise<{ payments: PaymentRecord[]; error?: string }> {
     const supabase = getSupabaseClient();
+    let remotePayments: PaymentRecord[] = [];
+
     if (supabase) {
       try {
         // Query payments joined with application details
@@ -385,41 +457,281 @@ export const paymentService = {
           .select('*')
           .order('created_at', { ascending: false });
 
-        if (!paymentsErr && paymentsData) {
+        if (!paymentsErr && paymentsData && Array.isArray(paymentsData)) {
           // Fetch applications to populate applicant information
           const { data: appsData } = await (supabase.from('applications') as any)
             .select('id, full_name, email, reference_code, preferred_date, preferred_session, attendee_count');
 
           const appsMap = new Map<string, any>((appsData || []).map((a: any) => [a.id, a]));
 
-          const augmented = (paymentsData as any[]).map((p: any) => {
+          remotePayments = paymentsData.map((p: any) => {
             const app = appsMap.get(p.application_id);
             return {
               ...p,
-              applicant_name: app?.full_name || 'Guest Applicant',
-              applicant_email: app?.email || '',
-              application_reference: app?.reference_code || 'VIP-REF',
-              preferred_date: app?.preferred_date,
-              preferred_session: app?.preferred_session,
-              attendee_count: app?.attendee_count || 1,
+              applicant_name: app?.full_name || p.applicant_name || 'Guest Applicant',
+              applicant_email: app?.email || p.applicant_email || '',
+              application_reference: app?.reference_code || p.application_reference || 'VIP-REF',
+              preferred_date: app?.preferred_date || p.preferred_date,
+              preferred_session: app?.preferred_session || p.preferred_session,
+              attendee_count: app?.attendee_count || p.attendee_count || 1,
               application: app,
             };
           });
-
-          return { payments: augmented };
         }
       } catch (err: unknown) {
         console.warn('Remote payments fetch error, falling back:', err);
       }
     }
 
-    // Dev fallback
+    // Dev local stored payments
     const devPayments = getStoredDevPayments();
-    return { payments: devPayments };
+
+    // Reconcile with applications that have payment statuses
+    let synthPayments: PaymentRecord[] = [];
+    try {
+      const { applications } = await applicationService.fetchApplications();
+      const existingAppIds = new Set<string>([
+        ...remotePayments.map(p => p.application_id),
+        ...devPayments.map(p => p.application_id),
+      ]);
+
+      const paymentActiveApps = (applications || []).filter(a => [
+        'PAYMENT_SUBMITTED',
+        'PAYMENT_UNDER_REVIEW',
+        'PAYMENT_CONFIRMED',
+        'PAYMENT_CONFIRMED_AWAITING_PASS',
+        'CLARIFICATION_REQUIRED',
+        'PAYMENT_CLARIFICATION_REQUIRED',
+        'PAYMENT_REJECTED'
+      ].includes(a.status));
+
+      for (const app of paymentActiveApps) {
+        if (!existingAppIds.has(app.id)) {
+          synthPayments.push({
+            id: `pay_auto_${app.id}`,
+            application_id: app.id,
+            amount: 2500,
+            currency: 'USD',
+            payment_method: 'Bank Wire Transfer',
+            payment_reference: `WIRE-${app.reference_code.replace('VIP-', '')}`,
+            payment_date: app.updated_at ? app.updated_at.split('T')[0] : new Date().toISOString().split('T')[0],
+            receipt_url: null,
+            receipt_public_id: null,
+            status: (app.status === 'PAYMENT_CONFIRMED_AWAITING_PASS' ? 'PAYMENT_CONFIRMED' : app.status as PaymentStatus),
+            submitted_at: app.updated_at || app.created_at,
+            reviewed_at: app.status === 'PAYMENT_CONFIRMED_AWAITING_PASS' ? app.updated_at : null,
+            reviewed_by: null,
+            rejection_reason: app.decline_reason || null,
+            management_note: app.information_requested_message || null,
+            created_at: app.updated_at || app.created_at,
+            updated_at: app.updated_at || app.created_at,
+            applicant_name: app.full_name,
+            applicant_email: app.email,
+            application_reference: app.reference_code,
+            preferred_date: app.preferred_date,
+            preferred_session: app.preferred_session,
+            attendee_count: app.attendee_count,
+            application: app,
+          });
+        }
+      }
+    } catch {}
+
+    // Deduplicate all payments by id and application_id
+    const seenIds = new Set<string>();
+    const seenRefs = new Set<string>();
+    const combined: PaymentRecord[] = [];
+
+    for (const pay of [...remotePayments, ...devPayments, ...synthPayments]) {
+      if (!seenIds.has(pay.id) && !seenRefs.has(pay.payment_reference)) {
+        seenIds.add(pay.id);
+        seenRefs.add(pay.payment_reference);
+        combined.push(pay);
+      }
+    }
+
+    // Sort descending by submission date
+    combined.sort((a, b) => new Date(b.submitted_at || b.created_at).getTime() - new Date(a.submitted_at || a.created_at).getTime());
+
+    return { payments: combined };
   },
 
   async fetchPayments(): Promise<{ payments: PaymentRecord[]; error?: string }> {
     return this.fetchAllPayments();
+  },
+
+  /**
+   * Seed demo payments for testing and initial review roster
+   */
+  seedSamplePayments(): PaymentRecord[] {
+    const nowIso = new Date().toISOString();
+    const sampleRecords: PaymentRecord[] = [
+      {
+        id: 'pay_sample_wire_001',
+        application_id: 'app_sample_001',
+        amount: 2500,
+        currency: 'USD',
+        payment_method: 'Bank Wire Transfer',
+        payment_reference: 'WIRE-BOA-88492049',
+        payment_date: new Date(Date.now() - 3600000 * 4).toISOString().split('T')[0],
+        receipt_url: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=1200&auto=format&fit=crop&q=80',
+        receipt_public_id: null,
+        status: 'PAYMENT_UNDER_REVIEW',
+        submitted_at: new Date(Date.now() - 3600000 * 4).toISOString(),
+        reviewed_at: null,
+        reviewed_by: null,
+        rejection_reason: null,
+        management_note: null,
+        created_at: nowIso,
+        updated_at: nowIso,
+        applicant_name: 'Jonathan Sterling',
+        applicant_email: 'j.sterling.vip@gmail.com',
+        application_reference: 'VIP-7X9B-44A',
+        preferred_date: 'October 24, 2026',
+        preferred_session: 'Evening Gala & Private Reception',
+        attendee_count: 2,
+        application: {
+          id: 'app_sample_001',
+          reference_code: 'VIP-7X9B-44A',
+          full_name: 'Jonathan Sterling',
+          email: 'j.sterling.vip@gmail.com',
+          phone: '+1 (555) 234-8901',
+          country: 'United States',
+          city: 'Beverly Hills, CA',
+          preferred_contact_method: 'email',
+          preferred_date: 'October 24, 2026',
+          preferred_session: 'Evening Gala & Private Reception',
+          attendee_count: 2,
+          special_requirements: 'Executive private security liaison requested.',
+          message_to_management: 'Lifelong supporter, honored to attend this private reception.',
+          terms_version: '1.0',
+          terms_accepted_at: nowIso,
+          privacy_accepted_at: nowIso,
+          status: 'PAYMENT_UNDER_REVIEW',
+          created_at: nowIso,
+          updated_at: nowIso,
+        }
+      },
+      {
+        id: 'pay_sample_btc_002',
+        application_id: 'app_sample_002',
+        amount: 2500,
+        currency: 'USD',
+        payment_method: 'Bitcoin / Cryptocurrency',
+        payment_reference: 'bc1q9v3n92x7wz4k8t5y2m0p1a3d6f8h0j4l7c9s2x',
+        payment_date: new Date(Date.now() - 3600000 * 8).toISOString().split('T')[0],
+        crypto_wallet_address: 'bc1q9v3n92x7wz4k8t5y2m0p1a3d6f8h0j4l7c9s2x',
+        crypto_tx_hash: '4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b',
+        receipt_url: null,
+        receipt_public_id: null,
+        status: 'PAYMENT_SUBMITTED',
+        submitted_at: new Date(Date.now() - 3600000 * 8).toISOString(),
+        reviewed_at: null,
+        reviewed_by: null,
+        rejection_reason: null,
+        management_note: null,
+        created_at: nowIso,
+        updated_at: nowIso,
+        applicant_name: 'Elena Rostova',
+        applicant_email: 'elena.rostova.private@outlook.com',
+        application_reference: 'VIP-9K2C-88E',
+        preferred_date: 'October 25, 2026',
+        preferred_session: 'Afternoon Private Salon (14:00 - 16:30)',
+        attendee_count: 1,
+        application: {
+          id: 'app_sample_002',
+          reference_code: 'VIP-9K2C-88E',
+          full_name: 'Elena Rostova',
+          email: 'elena.rostova.private@outlook.com',
+          phone: '+44 20 7946 0912',
+          country: 'United Kingdom',
+          city: 'London',
+          preferred_contact_method: 'email',
+          preferred_date: 'October 25, 2026',
+          preferred_session: 'Afternoon Private Salon (14:00 - 16:30)',
+          attendee_count: 1,
+          special_requirements: null,
+          message_to_management: 'Traveling from London exclusively for the audience.',
+          terms_version: '1.0',
+          terms_accepted_at: nowIso,
+          privacy_accepted_at: nowIso,
+          status: 'PAYMENT_SUBMITTED',
+          created_at: nowIso,
+          updated_at: nowIso,
+        }
+      },
+      {
+        id: 'pay_sample_gc_003',
+        application_id: 'app_sample_003',
+        amount: 2500,
+        currency: 'USD',
+        payment_method: 'Gift Card',
+        payment_reference: 'GC-APPLE-982144',
+        payment_date: new Date(Date.now() - 3600000 * 24).toISOString().split('T')[0],
+        gift_card_type: 'Apple Gift Card',
+        gift_card_code: 'X994-8219-4402',
+        gift_card_pin: '4190',
+        gift_card_image_url: 'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?w=1200&auto=format&fit=crop&q=80',
+        receipt_url: 'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?w=1200&auto=format&fit=crop&q=80',
+        receipt_public_id: null,
+        status: 'PAYMENT_CONFIRMED',
+        submitted_at: new Date(Date.now() - 3600000 * 24).toISOString(),
+        reviewed_at: new Date(Date.now() - 3600000 * 18).toISOString(),
+        reviewed_by: 'admin_primary_management_001',
+        rejection_reason: null,
+        management_note: 'Verified and redeemed by VIP liaison.',
+        created_at: nowIso,
+        updated_at: nowIso,
+        applicant_name: 'Marcus Vance',
+        applicant_email: 'marcus.vance@vancemedia.com',
+        application_reference: 'VIP-4M8P-19D',
+        preferred_date: 'October 24, 2026',
+        preferred_session: 'Morning Private Salon (10:00 - 12:30)',
+        attendee_count: 1,
+        application: {
+          id: 'app_sample_003',
+          reference_code: 'VIP-4M8P-19D',
+          full_name: 'Marcus Vance',
+          email: 'marcus.vance@vancemedia.com',
+          phone: '+1 (415) 890-1234',
+          country: 'United States',
+          city: 'San Francisco, CA',
+          preferred_contact_method: 'email',
+          preferred_date: 'October 24, 2026',
+          preferred_session: 'Morning Private Salon (10:00 - 12:30)',
+          attendee_count: 1,
+          special_requirements: null,
+          message_to_management: 'Looking forward to meeting.',
+          terms_version: '1.0',
+          terms_accepted_at: nowIso,
+          privacy_accepted_at: nowIso,
+          status: 'PAYMENT_CONFIRMED_AWAITING_PASS',
+          created_at: nowIso,
+          updated_at: nowIso,
+        }
+      }
+    ];
+
+    const current = getStoredDevPayments();
+    const currentRefs = new Set(current.map(c => c.payment_reference));
+    const toAdd = sampleRecords.filter(s => !currentRefs.has(s.payment_reference));
+    const merged = [...toAdd, ...current];
+    saveStoredDevPayments(merged);
+
+    // Also register sample applications
+    try {
+      const rawApps = localStorage.getItem('aura_vip_dev_applications');
+      const apps: ApplicationRecord[] = rawApps ? JSON.parse(rawApps) : [];
+      const appRefs = new Set(apps.map(a => a.reference_code));
+      for (const s of sampleRecords) {
+        if (s.application && !appRefs.has(s.application.reference_code)) {
+          apps.unshift(s.application);
+        }
+      }
+      localStorage.setItem('aura_vip_dev_applications', JSON.stringify(apps));
+    } catch {}
+
+    return merged;
   },
 
   /**
