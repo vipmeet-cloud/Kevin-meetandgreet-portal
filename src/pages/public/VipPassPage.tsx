@@ -149,7 +149,7 @@ export function VipPassPage() {
       ctx.fillStyle = '#FFFFFF';
       ctx.font = `bold ${24 * scale}px Georgia, serif`;
       ctx.letterSpacing = '1px';
-      ctx.fillText(pass.celebrity_name || settings?.celebrity_name || 'Kevin Costner', width / 2, 88 * scale);
+      ctx.fillText(settings?.celebrity_name || pass.celebrity_name || 'VIP Guest Celebrity', width / 2, 88 * scale);
 
       // Pass ID Pill
       ctx.fillStyle = 'rgba(212, 175, 55, 0.12)';

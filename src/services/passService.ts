@@ -66,6 +66,17 @@ export const passService = {
     const passId = `PASS-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 5).toUpperCase()}`;
     const nowIso = new Date().toISOString();
 
+    let celebrityName = 'Exclusive Guest Artist';
+    let eventName = 'Exclusive VIP Private Audience & Reception';
+    try {
+      const rawSettings = typeof window !== 'undefined' ? localStorage.getItem('aura_vip_meet_greet_settings') : null;
+      if (rawSettings) {
+        const s = JSON.parse(rawSettings);
+        if (s.celebrity_name) celebrityName = s.celebrity_name;
+        if (s.event_name) eventName = s.event_name;
+      }
+    } catch {}
+
     const passRecord: VipPassRecord = {
       id: passId,
       pass_number: passNumber,
@@ -73,8 +84,8 @@ export const passService = {
       payment_id: params.paymentId || null,
       verification_token: verificationToken,
       applicant_name: app.full_name,
-      celebrity_name: 'Kevin Costner',
-      event_name: 'Exclusive VIP Private Audience & Reception',
+      celebrity_name: celebrityName,
+      event_name: eventName,
       event_date: app.preferred_date || '2026-11-14',
       session_time: app.preferred_session || 'Afternoon (2:00 PM)',
       attendee_count: app.attendee_count || 1,

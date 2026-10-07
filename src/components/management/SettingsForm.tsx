@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { SettingsFormData, SettingsValidationErrors } from '../../types/settings';
+import { SettingsFormData, SettingsValidationErrors, CELEBRITY_PRESETS, CelebrityPreset } from '../../types/settings';
 import { fetchManagementMeetGreetSettings, saveMeetGreetSettings } from '../../services/settings';
 import { validateSettingsForm } from '../../services/validation';
 import { getCloudinaryConfig, uploadImageToCloudinary, testCloudinaryConnection } from '../../services/cloudinary';
@@ -222,6 +222,45 @@ export function SettingsForm() {
     setUploadingImage(false);
   };
 
+  const handleSelectCelebrityPreset = (preset: CelebrityPreset) => {
+    setFormData(prev => ({
+      ...prev,
+      celebrity_name: preset.name,
+      celebrity_title: preset.title,
+      celebrity_bio: preset.bio,
+      celebrity_image_url: preset.imageUrl,
+      event_name: preset.eventName,
+      event_description: preset.eventDescription,
+      hero_title: preset.heroTitle,
+      hero_subtitle: preset.heroSubtitle,
+    }));
+    setSaveSuccess(false);
+  };
+
+  const handleSyncCelebrityEverywhere = () => {
+    const target = formData.celebrity_name.trim();
+    if (!target) return;
+
+    setFormData(prev => {
+      const replaceAll = (text: string) => {
+        if (!text) return text;
+        return text
+          .replace(/Kevin Costner/gi, target)
+          .replace(/Kevin/g, target)
+          .replace(/Costner/g, target);
+      };
+
+      return {
+        ...prev,
+        hero_subtitle: replaceAll(prev.hero_subtitle) || `Exclusive VIP Access & Personal Reception with ${target}`,
+        event_description: replaceAll(prev.event_description) || `An intimate, strictly limited private audience and reception with ${target}.`,
+        event_name: replaceAll(prev.event_name) || `Exclusive VIP Private Audience & Reception with ${target}`,
+        celebrity_bio: replaceAll(prev.celebrity_bio),
+        fee_description: replaceAll(prev.fee_description),
+      };
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaveSuccess(false);
@@ -294,6 +333,90 @@ export function SettingsForm() {
           <span>{cloudinaryNotice}</span>
         </div>
       )}
+
+      {/* Quick Celebrity Switcher & Multi-Star Manager */}
+      <div className="p-6 sm:p-8 rounded-2xl bg-gradient-to-br from-[#121622] via-[#101420] to-[#181d2c] border border-amber-500/30 space-y-5 shadow-xl relative overflow-hidden">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/[0.08] pb-4">
+          <div className="space-y-1">
+            <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-[10px] font-mono uppercase tracking-wider text-amber-300">
+              <Sparkles className="w-3 h-3 text-amber-400" />
+              <span>Multi-Celebrity Manager</span>
+            </div>
+            <h3 className="text-base sm:text-lg font-bold text-white tracking-tight flex items-center gap-2">
+              <span>Switch or Customize Celebrity Profile</span>
+            </h3>
+            <p className="text-xs text-slate-300 leading-relaxed max-w-2xl">
+              Switch easily between multiple celebrities or customize your own. Choose a 1-click star preset below or type any celebrity name, then click <strong>&quot;Auto-Update Everywhere&quot;</strong> to synchronize all titles, descriptions, and subtitles across the portal.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleSyncCelebrityEverywhere}
+            className="px-4 py-2.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-200 text-xs font-semibold flex items-center gap-2 transition-all shrink-0 cursor-pointer active:scale-95 shadow-md"
+            title="Auto-replace previous celebrity name across all fields"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            <span>Auto-Update Everywhere</span>
+          </button>
+        </div>
+
+        {/* 1-Click Celebrity Presets */}
+        <div className="space-y-2.5">
+          <label className="block text-[11px] font-mono uppercase tracking-wider text-slate-400">
+            1-Click Star Presets (Yungblud, Kevin Costner & More)
+          </label>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            {CELEBRITY_PRESETS.map(preset => {
+              const isActive = formData.celebrity_name.trim().toLowerCase() === preset.name.toLowerCase();
+              return (
+                <button
+                  key={preset.id}
+                  type="button"
+                  onClick={() => handleSelectCelebrityPreset(preset)}
+                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-2.5 ${
+                    isActive
+                      ? 'bg-amber-500/20 border-amber-400 text-white shadow-lg ring-1 ring-amber-400/50'
+                      : 'bg-white/[0.03] border-white/[0.08] hover:bg-white/[0.07] hover:border-white/[0.2] text-slate-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <img
+                      src={preset.imageUrl}
+                      alt={preset.name}
+                      className="w-8 h-8 rounded-full object-cover border border-white/20 shrink-0"
+                      onError={(e) => {
+                        (e.target as HTMLElement).style.display = 'none';
+                      }}
+                    />
+                    <div className="min-w-0">
+                      <span className="text-xs font-bold text-white block truncate">
+                        {preset.name}
+                      </span>
+                      <span className="text-[10px] text-slate-400 block truncate">
+                        {preset.badge}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="text-slate-400 truncate">{preset.eventName.slice(0, 18)}...</span>
+                    {isActive ? (
+                      <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-mono font-semibold">Active</span>
+                    ) : (
+                      <span className="text-amber-400 hover:underline">Apply</span>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06] text-xs text-slate-300 flex items-center justify-between flex-wrap gap-2">
+          <span>Active Star: <strong className="text-white">{formData.celebrity_name || 'None Set'}</strong></span>
+          <span className="text-slate-400 text-[11px]">Saving will update landing page, VIP passes, and applicant portal instantly</span>
+        </div>
+      </div>
 
       {/* 1. Celebrity Profile Information */}
       <div className="p-6 sm:p-8 rounded-2xl bg-[#121622] border border-white/[0.08] space-y-6">

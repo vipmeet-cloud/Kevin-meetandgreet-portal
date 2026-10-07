@@ -6,6 +6,11 @@ import { MeetGreetSettings, SettingsFormData } from '../types/settings';
 const LOCAL_SETTINGS_KEY = 'aura_vip_meet_greet_settings';
 const FAVICON_KEY = 'aura_vip_site_favicon_url';
 
+function isUuid(val: unknown): boolean {
+  if (typeof val !== 'string') return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val.trim());
+}
+
 function getStoredLocalSettings(): MeetGreetSettings | null {
   try {
     const raw = localStorage.getItem(LOCAL_SETTINGS_KEY);
@@ -241,7 +246,7 @@ export async function saveMeetGreetSettings(
         updated_at: new Date().toISOString(),
       };
 
-      if (existingId) {
+      if (existingId && isUuid(existingId)) {
         const { data, error } = await (supabase.from('meet_greet_settings') as any)
           .update(basePayload)
           .eq('id', existingId)
@@ -253,14 +258,33 @@ export async function saveMeetGreetSettings(
           return { data: merged, error: null };
         }
       } else {
-        const { data, error } = await (supabase.from('meet_greet_settings') as any)
-          .insert(basePayload)
-          .select('*')
-          .single();
+        // Try updating existing active row if one exists
+        const { data: existingActive } = await (supabase.from('meet_greet_settings') as any)
+          .select('id')
+          .limit(1)
+          .maybeSingle();
 
-        if (!error && data) {
-          const merged = saveStoredLocalSettings({ ...data, ...payload });
-          return { data: merged, error: null };
+        if (existingActive?.id && isUuid(existingActive.id)) {
+          const { data, error } = await (supabase.from('meet_greet_settings') as any)
+            .update(basePayload)
+            .eq('id', existingActive.id)
+            .select('*')
+            .single();
+
+          if (!error && data) {
+            const merged = saveStoredLocalSettings({ ...data, ...payload });
+            return { data: merged, error: null };
+          }
+        } else {
+          const { data, error } = await (supabase.from('meet_greet_settings') as any)
+            .insert(basePayload)
+            .select('*')
+            .single();
+
+          if (!error && data) {
+            const merged = saveStoredLocalSettings({ ...data, ...payload });
+            return { data: merged, error: null };
+          }
         }
       }
     } catch (err: unknown) {

@@ -496,6 +496,143 @@ app.get('/api/setup/schema', (_req: Request, res: Response) => {
 });
 
 // ============================================================================
+// VISITOR & IP TRACKING SERVER ENDPOINTS
+// ============================================================================
+
+const serverVisitorStore = new Map<string, any>();
+const serverInquiryStore = new Map<string, any>();
+
+/**
+ * IP lookup helper from server headers
+ */
+app.get('/api/visitors/ip-lookup', (req: Request, res: Response) => {
+  const forwarded = req.headers['x-forwarded-for'] as string;
+  const ip = forwarded ? forwarded.split(',')[0].trim() : (req.socket.remoteAddress || '198.51.100.42');
+  res.json({
+    ip: ip.replace(/^::ffff:/, ''),
+    city: 'Network Visitor',
+    county: 'Metropolitan Area',
+    country: 'United States',
+    countryCode: 'US',
+    flagEmoji: '🌐',
+    isp: 'Direct Internet Connection',
+  });
+});
+
+/**
+ * Track visitor arrival and heartbeat
+ */
+app.post('/api/visitors/track', (req: Request, res: Response) => {
+  try {
+    const record = req.body;
+    if (!record || !record.visitorId) {
+      return res.status(400).json({ success: false, error: 'Visitor ID required' });
+    }
+
+    const forwarded = req.headers['x-forwarded-for'] as string;
+    const realIp = forwarded ? forwarded.split(',')[0].trim() : req.socket.remoteAddress;
+    const cleanRealIp = realIp ? realIp.replace(/^::ffff:/, '') : null;
+
+    const existing = serverVisitorStore.get(record.visitorId);
+    const updated = {
+      ...record,
+      ip: (cleanRealIp && cleanRealIp !== '127.0.0.1' && cleanRealIp !== '::1') ? cleanRealIp : record.ip,
+      isOnline: true,
+      lastSeenAt: new Date().toISOString(),
+    };
+
+    serverVisitorStore.set(record.visitorId, updated);
+    return res.json({ success: true, visitor: updated });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Visitor tracking error';
+    return res.status(500).json({ success: false, error: msg });
+  }
+});
+
+/**
+ * Visitor heartbeat
+ */
+app.post('/api/visitors/heartbeat', (req: Request, res: Response) => {
+  try {
+    const { visitorId, currentPath, timestamp } = req.body;
+    if (!visitorId) return res.status(400).json({ success: false });
+
+    const existing = serverVisitorStore.get(visitorId);
+    if (existing) {
+      existing.isOnline = true;
+      existing.lastSeenAt = timestamp || new Date().toISOString();
+      if (currentPath) existing.currentPage = currentPath;
+      serverVisitorStore.set(visitorId, existing);
+    }
+    return res.json({ success: true });
+  } catch {
+    return res.status(500).json({ success: false });
+  }
+});
+
+/**
+ * Retrieve all tracked visitors for management
+ */
+app.get('/api/visitors', (_req: Request, res: Response) => {
+  const visitors = Array.from(serverVisitorStore.values()).sort(
+    (a, b) => new Date(b.lastSeenAt).getTime() - new Date(a.lastSeenAt).getTime()
+  );
+  return res.json({ success: true, visitors, count: visitors.length });
+});
+
+// ============================================================================
+// IN-APP FLOATING CONTACT & INQUIRIES ENDPOINTS
+// ============================================================================
+
+/**
+ * Submit inquiry from floating contact box
+ */
+app.post('/api/inquiries/submit', (req: Request, res: Response) => {
+  try {
+    const inquiry = req.body;
+    if (!inquiry || !inquiry.id) {
+      return res.status(400).json({ success: false, error: 'Invalid inquiry data' });
+    }
+    serverInquiryStore.set(inquiry.id, inquiry);
+    return res.json({ success: true, inquiry });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Inquiry submission error';
+    return res.status(500).json({ success: false, error: msg });
+  }
+});
+
+/**
+ * Retrieve all inquiries for management
+ */
+app.get('/api/inquiries', (_req: Request, res: Response) => {
+  const inquiries = Array.from(serverInquiryStore.values()).sort(
+    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+  );
+  return res.json({ success: true, inquiries, count: inquiries.length });
+});
+
+/**
+ * Management reply to inquiry
+ */
+app.post('/api/inquiries/:id/reply', (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { message, status } = req.body;
+    const target = serverInquiryStore.get(id);
+    if (target) {
+      if (message) target.messages.push(message);
+      if (status) target.status = status;
+      target.updatedAt = new Date().toISOString();
+      serverInquiryStore.set(id, target);
+      return res.json({ success: true, inquiry: target });
+    }
+    return res.status(404).json({ success: false, error: 'Inquiry not found' });
+  } catch {
+    return res.status(500).json({ success: false });
+  }
+});
+
+// ============================================================================
 // VITE DEV SERVER / STATIC ASSETS PIPELINE
 // ============================================================================
 
