@@ -11,43 +11,36 @@ export interface CloudinaryConfig {
   isConfigured: boolean;
 }
 
-let runtimeCloudName = 
-  (typeof window !== 'undefined' ? localStorage.getItem('aura_vip_cloudinary_cloud_name') : null) ||
-  import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || 
-  (import.meta.env as any).CLOUDINARY_CLOUD_NAME || 
-  '';
+const DEFAULT_CLOUD_NAME = 'jt6qb4ke';
+const DEFAULT_UPLOAD_PRESET = 'Vipmeet';
 
-let runtimeUploadPreset = 
-  (typeof window !== 'undefined' ? localStorage.getItem('aura_vip_cloudinary_upload_preset') : null) ||
-  import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || 
-  (import.meta.env as any).CLOUDINARY_UPLOAD_PRESET || 
-  import.meta.env.VITE_CLOUDINARY_PRESET || 
-  (import.meta.env as any).CLOUDINARY_PRESET || 
-  'Vipmeet';
+let serverDiscoveredCloudName = '';
+let serverDiscoveredUploadPreset = '';
 
-// Auto-discover configuration from server if frontend env did not include VITE_ prefix
+// Auto-discover configuration from server if frontend env did not include VITE_ prefix on Vercel
 if (typeof window !== 'undefined') {
   fetch('/api/cloudinary/config')
     .then(r => r.json())
     .then(cfg => {
-      if (cfg.cloudName && !localStorage.getItem('aura_vip_cloudinary_cloud_name')) {
-        runtimeCloudName = cfg.cloudName;
+      if (cfg && cfg.cloudName) {
+        serverDiscoveredCloudName = cfg.cloudName;
       }
-      if (cfg.uploadPreset && !localStorage.getItem('aura_vip_cloudinary_upload_preset')) {
-        runtimeUploadPreset = cfg.uploadPreset;
+      if (cfg && cfg.uploadPreset) {
+        serverDiscoveredUploadPreset = cfg.uploadPreset;
       }
     })
     .catch(() => {});
 }
 
 export function setCloudinaryCustomConfig(cloudName: string, uploadPreset: string) {
-  runtimeCloudName = cloudName.trim();
-  runtimeUploadPreset = uploadPreset.trim() || 'Vipmeet';
+  const cleanCloud = cloudName.trim();
+  const cleanPreset = uploadPreset.trim() || DEFAULT_UPLOAD_PRESET;
+  
   if (typeof window !== 'undefined') {
-    if (runtimeCloudName) {
-      localStorage.setItem('aura_vip_cloudinary_cloud_name', runtimeCloudName);
+    if (cleanCloud) {
+      localStorage.setItem('aura_vip_cloudinary_cloud_name', cleanCloud);
     }
-    localStorage.setItem('aura_vip_cloudinary_upload_preset', runtimeUploadPreset);
+    localStorage.setItem('aura_vip_cloudinary_upload_preset', cleanPreset);
   }
 }
 
@@ -55,24 +48,32 @@ export function getCloudinaryConfig(): CloudinaryConfig {
   const localCloud = typeof window !== 'undefined' ? localStorage.getItem('aura_vip_cloudinary_cloud_name') : null;
   const localPreset = typeof window !== 'undefined' ? localStorage.getItem('aura_vip_cloudinary_upload_preset') : null;
 
+  const envCloud = 
+    import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || 
+    (import.meta.env as any).CLOUDINARY_CLOUD_NAME;
+
+  const envPreset = 
+    import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || 
+    (import.meta.env as any).CLOUDINARY_UPLOAD_PRESET || 
+    import.meta.env.VITE_CLOUDINARY_PRESET || 
+    (import.meta.env as any).CLOUDINARY_PRESET;
+
   const cloudName = 
     localCloud ||
-    runtimeCloudName || 
-    import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || 
-    (import.meta.env as any).CLOUDINARY_CLOUD_NAME || 
-    '';
+    envCloud ||
+    serverDiscoveredCloudName ||
+    DEFAULT_CLOUD_NAME;
 
   const uploadPreset = 
     localPreset ||
-    runtimeUploadPreset || 
-    import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || 
-    (import.meta.env as any).CLOUDINARY_UPLOAD_PRESET || 
-    'Vipmeet';
+    envPreset ||
+    serverDiscoveredUploadPreset ||
+    DEFAULT_UPLOAD_PRESET;
 
   return {
-    cloudName,
-    uploadPreset,
-    isConfigured: Boolean(cloudName && cloudName.length > 0),
+    cloudName: cloudName.trim(),
+    uploadPreset: uploadPreset.trim(),
+    isConfigured: Boolean(cloudName && cloudName.trim().length > 0),
   };
 }
 
@@ -82,7 +83,14 @@ export interface UploadResult {
   error: string | null;
 }
 
-export type CloudinaryFolder = 'celebrity-portraits' | 'event-logos' | 'vip-passes' | 'payment-receipts' | 'crypto-wallets' | 'gift-cards';
+export type CloudinaryFolder = 
+  | 'celebrity-portraits' 
+  | 'event-logos' 
+  | 'vip-passes' 
+  | 'payment-receipts' 
+  | 'crypto-wallets' 
+  | 'gift-cards'
+  | 'favicons';
 
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -94,10 +102,10 @@ function fileToBase64(file: File): Promise<string> {
 }
 
 /**
- * Upload an asset (image or PDF receipt) to Cloudinary.
+ * Upload an asset (image, PDF receipt, or favicon) to Cloudinary.
  * Tries the primary configured preset (Vipmeet), with smart fallback
  * across preset variations (case-sensitivity and defaults), server proxy,
- * and high-availability base64 fallback so that image uploads never fail.
+ * and high-availability base64 fallback so that uploads never fail.
  */
 export async function uploadImageToCloudinary(
   file: File,
@@ -111,25 +119,13 @@ export async function uploadImageToCloudinary(
     console.warn('Could not read file locally:', err);
   }
 
-  // Auto-refresh config if needed
-  if (!runtimeCloudName && typeof window !== 'undefined') {
-    try {
-      const res = await fetch('/api/cloudinary/config');
-      if (res.ok) {
-        const cfg = await res.json();
-        if (cfg.cloudName) runtimeCloudName = cfg.cloudName;
-        if (cfg.uploadPreset) runtimeUploadPreset = cfg.uploadPreset;
-      }
-    } catch {}
-  }
-
   const config = getCloudinaryConfig();
 
   // If Cloudinary cloud name is configured, attempt direct unsigned upload
-  if (config.isConfigured) {
+  if (config.isConfigured && config.cloudName) {
     const presetsToTry = Array.from(new Set([
       config.uploadPreset,
-      'Vipmeet',
+      DEFAULT_UPLOAD_PRESET,
       'vipmeet',
       'vip_portal_unsigned',
       'ml_default',
@@ -140,7 +136,30 @@ export async function uploadImageToCloudinary(
     const uploadUrl = `https://api.cloudinary.com/v1_1/${config.cloudName}/${endpointType}/upload`;
 
     for (const preset of presetsToTry) {
-      // Attempt with folder
+      // 1. Try standard upload without client folder (most permissive for unsigned presets)
+      try {
+        const noFolderData = new FormData();
+        noFolderData.append('file', file);
+        noFolderData.append('upload_preset', preset);
+
+        const response = await fetch(uploadUrl, {
+          method: 'POST',
+          body: noFolderData,
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          return {
+            secureUrl: data.secure_url,
+            publicId: data.public_id,
+            error: null,
+          };
+        }
+      } catch (err) {
+        console.warn(`Direct Cloudinary upload attempt with preset ${preset} failed:`, err);
+      }
+
+      // 2. Try with folder tag in case preset supports it
       try {
         const formData = new FormData();
         formData.append('file', file);
@@ -160,27 +179,8 @@ export async function uploadImageToCloudinary(
             error: null,
           };
         }
-
-        // Try without folder in case preset restricts folder setting
-        const noFolderData = new FormData();
-        noFolderData.append('file', file);
-        noFolderData.append('upload_preset', preset);
-
-        const retryRes = await fetch(uploadUrl, {
-          method: 'POST',
-          body: noFolderData,
-        });
-
-        if (retryRes.ok) {
-          const retryData = await retryRes.json();
-          return {
-            secureUrl: retryData.secure_url,
-            publicId: retryData.public_id,
-            error: null,
-          };
-        }
       } catch (err) {
-        console.warn(`Direct Cloudinary upload attempt with preset ${preset} failed:`, err);
+        console.warn(`Direct Cloudinary folder upload with preset ${preset} failed:`, err);
       }
     }
   }
@@ -228,4 +228,53 @@ export async function uploadImageToCloudinary(
     publicId: null,
     error: 'Could not upload file. Please select a valid JPG, PNG, WEBP, or PDF.',
   };
+}
+
+/**
+ * Diagnostic helper to test Cloudinary upload connection directly
+ */
+export async function testCloudinaryConnection(
+  customCloudName?: string,
+  customPreset?: string
+): Promise<{ success: boolean; message: string; url?: string }> {
+  const cloud = (customCloudName || getCloudinaryConfig().cloudName).trim();
+  const preset = (customPreset || getCloudinaryConfig().uploadPreset).trim() || DEFAULT_UPLOAD_PRESET;
+
+  if (!cloud) {
+    return { success: false, message: 'Cloud Name is empty.' };
+  }
+
+  // 1x1 transparent PNG data URI
+  const testPixel = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
+  try {
+    const formData = new FormData();
+    formData.append('file', testPixel);
+    formData.append('upload_preset', preset);
+
+    const uploadUrl = `https://api.cloudinary.com/v1_1/${cloud}/image/upload`;
+    const res = await fetch(uploadUrl, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      return {
+        success: true,
+        message: `Cloudinary connected successfully! Preset "${preset}" on "${cloud}" is active.`,
+        url: data.secure_url,
+      };
+    } else {
+      const errData = await res.json().catch(() => null);
+      const errMsg = errData?.error?.message || `HTTP ${res.status} ${res.statusText}`;
+      return {
+        success: false,
+        message: `Upload failed: ${errMsg}`,
+      };
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Network error';
+    return { success: false, message: `Could not reach Cloudinary: ${msg}` };
+  }
 }

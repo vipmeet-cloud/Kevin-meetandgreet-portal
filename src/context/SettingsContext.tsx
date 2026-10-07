@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { MeetGreetSettings } from '../types/settings';
 import { fetchActiveMeetGreetSettings } from '../services/settings';
 import { isSupabaseConfigured } from '../services/supabase';
+import { applyFavicon } from '../utils/favicon';
 
 interface SettingsContextType {
   settings: MeetGreetSettings | null;
@@ -44,6 +45,9 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
           }
           if (data.brand_secondary_color) {
             document.documentElement.style.setProperty('--color-brand-secondary', data.brand_secondary_color);
+          }
+          if (data.site_favicon_url) {
+            applyFavicon(data.site_favicon_url);
           }
         }
       } else if (fetchErr) {

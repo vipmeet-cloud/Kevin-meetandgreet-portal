@@ -14,6 +14,17 @@ const isProduction = process.env.NODE_ENV === 'production';
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ limit: '25mb', extended: true }));
 
+// Universal CORS & Preflight handling for Vercel & custom domain deployments
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
 // Resend Email Client
 const resendApiKey = process.env.RESEND_API_KEY || '';
 const resend = resendApiKey ? new Resend(resendApiKey) : null;
@@ -55,7 +66,7 @@ const serverSupabase = isSupabaseConfigured ? createClient(supabaseUrl, supabase
 /**
  * Health check endpoint
  */
-app.get('/api/health', (_req: Request, res: Response) => {
+app.get(['/api/health', '/health'], (_req: Request, res: Response) => {
   res.json({
     status: 'healthy',
     service: 'VIP Meet & Greet Portal API',
@@ -67,7 +78,7 @@ app.get('/api/health', (_req: Request, res: Response) => {
 /**
  * Service configuration status (Never exposes secrets)
  */
-app.get('/api/services/status', (_req: Request, res: Response) => {
+app.get(['/api/services/status', '/services/status'], (_req: Request, res: Response) => {
   res.json({
     supabaseConfigured: isSupabaseConfigured,
     cloudinaryConfigured: Boolean(process.env.CLOUDINARY_CLOUD_NAME || process.env.VITE_CLOUDINARY_CLOUD_NAME),
@@ -76,11 +87,45 @@ app.get('/api/services/status', (_req: Request, res: Response) => {
 });
 
 /**
+ * Supabase public configuration helper
+ * Ensures frontend receives Vercel environment variables even if entered without VITE_ prefix
+ */
+app.get(['/api/supabase/config', '/supabase/config'], (_req: Request, res: Response) => {
+  const url = 
+    process.env.VITE_SUPABASE_URL || 
+    process.env.SUPABASE_URL || 
+    process.env.NEXT_PUBLIC_SUPABASE_URL || 
+    'https://fiwsjwpyzhltzrdnpcrf.supabase.co';
+  const anonKey = 
+    process.env.VITE_SUPABASE_ANON_KEY || 
+    process.env.SUPABASE_ANON_KEY || 
+    process.env.SUPABASE_KEY || 
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZpd3Nqd3B5emhsdHpyZG5wY3JmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEwMTk1NTYsImV4cCI6MjEwNjU5NTU1Nn0.Vx7y96504_aJaORBHv1bC2T3IK7Usx_rhj78OPE_wNI';
+
+  const isConfigured = Boolean(
+    url && 
+    anonKey && 
+    !url.includes('your-project-id') && 
+    !anonKey.includes('your-anon-public-key')
+  );
+
+  res.json({
+    url,
+    anonKey,
+    isConfigured,
+  });
+});
+
+/**
  * Cloudinary public configuration helper (non-sensitive: cloud name and preset only)
  * Ensures frontend receives Vercel environment variables even if entered without VITE_ prefix
  */
-app.get('/api/cloudinary/config', (_req: Request, res: Response) => {
-  const cloudName = process.env.VITE_CLOUDINARY_CLOUD_NAME || process.env.CLOUDINARY_CLOUD_NAME || '';
+app.get(['/api/cloudinary/config', '/cloudinary/config'], (_req: Request, res: Response) => {
+  const cloudName = 
+    process.env.VITE_CLOUDINARY_CLOUD_NAME || 
+    process.env.CLOUDINARY_CLOUD_NAME || 
+    'jt6qb4ke';
   const uploadPreset = 
     process.env.VITE_CLOUDINARY_UPLOAD_PRESET || 
     process.env.CLOUDINARY_UPLOAD_PRESET || 
@@ -99,14 +144,17 @@ app.get('/api/cloudinary/config', (_req: Request, res: Response) => {
  * Universal media upload proxy endpoint
  * Accepts base64 data URI and uploads to Cloudinary or returns compliant storage reference
  */
-app.post('/api/upload', async (req: Request, res: Response) => {
+app.post(['/api/upload', '/upload'], async (req: Request, res: Response) => {
   try {
     const { fileData, fileName, folder = 'vip_portal' } = req.body;
     if (!fileData) {
       return res.status(400).json({ success: false, error: 'No file data provided' });
     }
 
-    const cloudName = process.env.VITE_CLOUDINARY_CLOUD_NAME || process.env.CLOUDINARY_CLOUD_NAME;
+    const cloudName = 
+      process.env.VITE_CLOUDINARY_CLOUD_NAME || 
+      process.env.CLOUDINARY_CLOUD_NAME || 
+      'jt6qb4ke';
     const uploadPreset = 
       process.env.VITE_CLOUDINARY_UPLOAD_PRESET || 
       process.env.CLOUDINARY_UPLOAD_PRESET || 
@@ -117,10 +165,12 @@ app.post('/api/upload', async (req: Request, res: Response) => {
     // If Cloudinary is available on server, attempt direct upload
     if (cloudName) {
       try {
-        const formData = new URLSearchParams();
+        const formData = new FormData();
         formData.append('file', fileData);
         formData.append('upload_preset', uploadPreset);
-        formData.append('folder', folder);
+        if (folder) {
+          formData.append('folder', folder);
+        }
 
         const isPdf = typeof fileData === 'string' && fileData.includes('application/pdf');
         const endpointType = isPdf ? 'raw' : 'image';
@@ -132,7 +182,7 @@ app.post('/api/upload', async (req: Request, res: Response) => {
         });
 
         if (cRes.ok) {
-          const cData = await cRes.json();
+          const cData = (await cRes.json()) as any;
           return res.json({
             success: true,
             secureUrl: cData.secure_url,
@@ -511,7 +561,9 @@ async function startServer() {
   }
 }
 
-startServer();
+if (!process.env.VERCEL) {
+  startServer();
+}
 
 export default app;
 export { app };

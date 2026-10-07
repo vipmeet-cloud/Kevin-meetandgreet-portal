@@ -27,6 +27,13 @@ export type MeetGreetSettings = Database['public']['Tables']['meet_greet_setting
   // Cloudinary Direct Config
   cloudinary_cloud_name?: string | null;
   cloudinary_upload_preset?: string | null;
+
+  // Website Favicon & Visual Identity
+  site_favicon_url?: string | null;
+
+  // Supabase Runtime Config Overrides
+  supabase_url?: string | null;
+  supabase_anon_key?: string | null;
 };
 export type MeetGreetSettingsInsert = Database['public']['Tables']['meet_greet_settings']['Insert'];
 export type MeetGreetSettingsUpdate = Database['public']['Tables']['meet_greet_settings']['Update'];
@@ -74,6 +81,13 @@ export interface SettingsFormData {
   // Cloudinary Direct Config
   cloudinary_cloud_name: string;
   cloudinary_upload_preset: string;
+
+  // Website Favicon & Identity
+  site_favicon_url: string;
+
+  // Supabase Runtime Config Overrides
+  supabase_url: string;
+  supabase_anon_key: string;
 }
 
 export interface SettingsValidationErrors {

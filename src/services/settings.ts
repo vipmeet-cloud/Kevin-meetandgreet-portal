@@ -1,7 +1,10 @@
-import { getSupabaseClient } from './supabase';
-import { MeetGreetSettings, SettingsFormData, MeetGreetSettingsInsert, MeetGreetSettingsUpdate } from '../types/settings';
+import { getSupabaseClient, setRuntimeSupabaseCredentials } from './supabase';
+import { setCloudinaryCustomConfig } from './cloudinary';
+import { applyFavicon } from '../utils/favicon';
+import { MeetGreetSettings, SettingsFormData } from '../types/settings';
 
 const LOCAL_SETTINGS_KEY = 'aura_vip_meet_greet_settings';
+const FAVICON_KEY = 'aura_vip_site_favicon_url';
 
 function getStoredLocalSettings(): MeetGreetSettings | null {
   try {
@@ -12,6 +15,8 @@ function getStoredLocalSettings(): MeetGreetSettings | null {
 }
 
 function saveStoredLocalSettings(data: any): MeetGreetSettings {
+  const existingFavicon = (typeof window !== 'undefined' ? localStorage.getItem(FAVICON_KEY) : null) || '/favicon.svg';
+
   const record: MeetGreetSettings = {
     id: data.id || `set_${Date.now()}`,
     created_at: data.created_at || new Date().toISOString(),
@@ -50,10 +55,24 @@ function saveStoredLocalSettings(data: any): MeetGreetSettings {
     gift_card_enabled: data.gift_card_enabled !== undefined ? data.gift_card_enabled : true,
     gift_card_types: data.gift_card_types || 'Apple Gift Card, Steam, Amazon, Vanilla Visa, Razer Gold',
     gift_card_instructions: data.gift_card_instructions || 'Purchase an approved gift card matching your application fee amount. Enter the claim code / PIN and upload clear photos of the front and back of the card.',
+    // Favicon & Branding Identity
+    site_favicon_url: data.site_favicon_url || existingFavicon,
+    // Cloudinary
+    cloudinary_cloud_name: data.cloudinary_cloud_name || 'jt6qb4ke',
+    cloudinary_upload_preset: data.cloudinary_upload_preset || 'Vipmeet',
+    // Supabase
+    supabase_url: data.supabase_url || null,
+    supabase_anon_key: data.supabase_anon_key || null,
   };
+
   try {
     localStorage.setItem(LOCAL_SETTINGS_KEY, JSON.stringify(record));
+    if (record.site_favicon_url) {
+      localStorage.setItem(FAVICON_KEY, record.site_favicon_url);
+      applyFavicon(record.site_favicon_url);
+    }
   } catch {}
+
   return record;
 }
 
@@ -73,8 +92,9 @@ export async function fetchActiveMeetGreetSettings(): Promise<{
         .maybeSingle();
 
       if (!error && data) {
-        saveStoredLocalSettings(data);
-        return { data: data as MeetGreetSettings | null, error: null };
+        const mapped = saveStoredLocalSettings(data);
+        if (mapped.site_favicon_url) applyFavicon(mapped.site_favicon_url);
+        return { data: mapped, error: null };
       }
     } catch {}
   }
@@ -82,11 +102,13 @@ export async function fetchActiveMeetGreetSettings(): Promise<{
   // Check localStorage fallback
   const local = getStoredLocalSettings();
   if (local) {
+    if (local.site_favicon_url) applyFavicon(local.site_favicon_url);
     return { data: local, error: null };
   }
 
   // Default seed fallback
   const seeded = saveStoredLocalSettings({});
+  if (seeded.site_favicon_url) applyFavicon(seeded.site_favicon_url);
   return { data: seeded, error: null };
 }
 
@@ -105,16 +127,21 @@ export async function fetchManagementMeetGreetSettings(): Promise<{
         .maybeSingle();
 
       if (!error && data) {
-        saveStoredLocalSettings(data);
-        return { data: data as MeetGreetSettings | null, error: null };
+        const mapped = saveStoredLocalSettings(data);
+        if (mapped.site_favicon_url) applyFavicon(mapped.site_favicon_url);
+        return { data: mapped, error: null };
       }
     } catch {}
   }
 
   const local = getStoredLocalSettings();
-  if (local) return { data: local, error: null };
+  if (local) {
+    if (local.site_favicon_url) applyFavicon(local.site_favicon_url);
+    return { data: local, error: null };
+  }
 
   const seeded = saveStoredLocalSettings({});
+  if (seeded.site_favicon_url) applyFavicon(seeded.site_favicon_url);
   return { data: seeded, error: null };
 }
 
@@ -166,17 +193,26 @@ export async function saveMeetGreetSettings(
     gift_card_instructions: formData.gift_card_instructions?.trim() || null,
 
     // Cloudinary Direct Config
-    cloudinary_cloud_name: formData.cloudinary_cloud_name?.trim() || null,
+    cloudinary_cloud_name: formData.cloudinary_cloud_name?.trim() || 'jt6qb4ke',
     cloudinary_upload_preset: formData.cloudinary_upload_preset?.trim() || 'Vipmeet',
+
+    // Favicon & Visual Identity
+    site_favicon_url: formData.site_favicon_url?.trim() || '/favicon.svg',
+
+    // Supabase
+    supabase_url: formData.supabase_url?.trim() || null,
+    supabase_anon_key: formData.supabase_anon_key?.trim() || null,
   };
 
-  // If user provided Cloudinary details in settings, persist to local storage config
+  // Sync Cloudinary and Supabase configs to runtime storage
   if (typeof window !== 'undefined') {
-    if (formData.cloudinary_cloud_name) {
-      localStorage.setItem('aura_vip_cloudinary_cloud_name', formData.cloudinary_cloud_name.trim());
+    setCloudinaryCustomConfig(payload.cloudinary_cloud_name, payload.cloudinary_upload_preset);
+    if (payload.supabase_url && payload.supabase_anon_key) {
+      setRuntimeSupabaseCredentials(payload.supabase_url, payload.supabase_anon_key);
     }
-    if (formData.cloudinary_upload_preset) {
-      localStorage.setItem('aura_vip_cloudinary_upload_preset', formData.cloudinary_upload_preset.trim());
+    if (payload.site_favicon_url) {
+      localStorage.setItem(FAVICON_KEY, payload.site_favicon_url);
+      applyFavicon(payload.site_favicon_url);
     }
   }
 
@@ -185,26 +221,46 @@ export async function saveMeetGreetSettings(
   const supabase = getSupabaseClient();
   if (supabase) {
     try {
+      // Stripped payload for table (in case schema doesn't have custom columns yet)
+      const basePayload: any = {
+        celebrity_name: payload.celebrity_name,
+        celebrity_title: payload.celebrity_title,
+        celebrity_bio: payload.celebrity_bio,
+        celebrity_image_url: payload.celebrity_image_url,
+        event_name: payload.event_name,
+        event_description: payload.event_description,
+        hero_title: payload.hero_title,
+        hero_subtitle: payload.hero_subtitle,
+        event_logo_url: payload.event_logo_url,
+        brand_primary_color: payload.brand_primary_color,
+        brand_secondary_color: payload.brand_secondary_color,
+        support_email: payload.support_email,
+        support_phone: payload.support_phone,
+        support_whatsapp: payload.support_whatsapp,
+        is_active: payload.is_active,
+        updated_at: new Date().toISOString(),
+      };
+
       if (existingId) {
         const { data, error } = await (supabase.from('meet_greet_settings') as any)
-          .update(payload)
+          .update(basePayload)
           .eq('id', existingId)
           .select('*')
           .single();
 
         if (!error && data) {
-          saveStoredLocalSettings(data);
-          return { data: data as MeetGreetSettings, error: null };
+          const merged = saveStoredLocalSettings({ ...data, ...payload });
+          return { data: merged, error: null };
         }
       } else {
         const { data, error } = await (supabase.from('meet_greet_settings') as any)
-          .insert(payload)
+          .insert(basePayload)
           .select('*')
           .single();
 
         if (!error && data) {
-          saveStoredLocalSettings(data);
-          return { data: data as MeetGreetSettings, error: null };
+          const merged = saveStoredLocalSettings({ ...data, ...payload });
+          return { data: merged, error: null };
         }
       }
     } catch (err: unknown) {
