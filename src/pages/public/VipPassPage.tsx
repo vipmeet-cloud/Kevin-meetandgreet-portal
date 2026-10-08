@@ -285,7 +285,7 @@ export function VipPassPage() {
   const isRevoked = pass.status === 'REVOKED';
   const isExpired = pass.status === 'EXPIRED';
   const statusInfo = getPassStatusDisplay(pass.status);
-  const celebrityName = pass.celebrity_name || settings?.celebrity_name || 'Kevin Costner';
+  const celebrityName = settings?.celebrity_name || pass.celebrity_name || 'VIP Guest Celebrity';
 
   return (
     <div className="min-h-screen py-6 px-4 sm:px-6 flex flex-col items-center justify-center">

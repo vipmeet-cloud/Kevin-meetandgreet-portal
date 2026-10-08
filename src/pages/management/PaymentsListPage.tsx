@@ -194,25 +194,12 @@ export function PaymentsListPage() {
           <div className="flex items-center gap-2 self-stretch sm:self-auto justify-end">
             <button
               type="button"
-              onClick={() => {
-                paymentService.seedSamplePayments();
-                loadPayments();
-              }}
-              className="min-h-[44px] px-3.5 rounded-xl bg-amber-400/10 hover:bg-amber-400/20 text-amber-300 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer border border-amber-400/25 shrink-0"
-              title="Add Demo Payment Records"
-            >
-              <Coins className="w-3.5 h-3.5 text-amber-400" />
-              <span>+ Add Demo Payments</span>
-            </button>
-
-            <button
-              type="button"
               onClick={loadPayments}
-              className="min-h-[44px] px-3.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer border border-white/[0.06] shrink-0"
+              className="min-h-[44px] px-4 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 text-xs font-medium flex items-center gap-2 transition-colors cursor-pointer border border-white/[0.06] shrink-0"
               title="Refresh Payments"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-              <span className="hidden sm:inline">Refresh</span>
+              <span>Refresh</span>
             </button>
           </div>
 
@@ -372,21 +359,8 @@ export function PaymentsListPage() {
               <p className="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed">
                 {searchQuery
                   ? `No payment transactions match "${searchQuery}".`
-                  : 'No payments currently registered in this filter view. Click below to load demo payment records.'}
+                  : 'No payments currently registered in this filter view. Live guest payments submitted through the public portal will appear here in real-time.'}
               </p>
-            </div>
-            <div>
-              <button
-                type="button"
-                onClick={() => {
-                  paymentService.seedSamplePayments();
-                  loadPayments();
-                }}
-                className="px-4 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs uppercase tracking-wider transition-colors inline-flex items-center gap-2 cursor-pointer shadow-md"
-              >
-                <Coins className="w-4 h-4 text-slate-950" />
-                <span>Load Sample VIP Payments</span>
-              </button>
             </div>
           </div>
         )}

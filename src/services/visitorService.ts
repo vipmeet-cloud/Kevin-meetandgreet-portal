@@ -506,14 +506,7 @@ export const visitorTrackerService = {
       }
     } catch {}
 
-    // If server is not responding, return stored local logs
-    // Check if empty, add initial demo seed so management can immediately explore
-    if (localLogs.length === 0) {
-      const seeded = getInitialSeedVisitors();
-      saveStoredVisitorLogs(seeded);
-      return { visitors: seeded };
-    }
-
+    // Return real tracked visitor logs
     return {
       visitors: localLogs.sort(
         (a, b) => new Date(b.lastSeenAt).getTime() - new Date(a.lastSeenAt).getTime()

@@ -6,7 +6,8 @@ import {
   loginManagement, 
   logoutManagement, 
   fetchCurrentManagementProfile,
-  getStoredManagementSession 
+  getStoredManagementSession,
+  saveStoredManagementSession
 } from '../services/auth';
 
 interface AuthContextType extends AuthState {
@@ -44,15 +45,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const refreshAuth = useCallback(async () => {
-    // 1. Check local stored session first
+    // 1. Check local multi-tier stored session first (memory, sessionStorage, localStorage)
     const stored = getStoredManagementSession();
-    if (stored) {
+    if (stored && stored.profile) {
       setUser(stored.user);
       setSession(stored.session);
       setManagementProfile(stored.profile);
       setIsLoading(false);
       return;
     }
+
+    // 2. Check server session (/api/auth/session) for cross-browser & incognito resilience
+    try {
+      const res = await fetch('/api/auth/session');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.profile) {
+          saveStoredManagementSession({ user: data.user, session: data.session, profile: data.profile });
+          setUser(data.user);
+          setSession(data.session);
+          setManagementProfile(data.profile);
+          setIsLoading(false);
+          return;
+        }
+      }
+    } catch {}
 
     if (!isSupabaseConfigured()) {
       setIsLoading(false);
@@ -68,9 +85,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const { data: sessionData, error: sessionErr } = await supabase.auth.getSession();
       if (sessionErr || !sessionData.session) {
-        setUser(null);
-        setSession(null);
-        setManagementProfile(null);
+        // Only clear if no stored session
+        const fallbackStored = getStoredManagementSession();
+        if (fallbackStored && fallbackStored.profile) {
+          setUser(fallbackStored.user);
+          setSession(fallbackStored.session);
+          setManagementProfile(fallbackStored.profile);
+        } else {
+          setUser(null);
+          setSession(null);
+          setManagementProfile(null);
+        }
         setIsLoading(false);
         return;
       }
@@ -95,15 +120,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const supabase = getSupabaseClient();
     if (!supabase) return;
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
-      setSession(currentSession);
-      setUser(currentSession?.user || null);
-
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, currentSession) => {
       if (currentSession?.user) {
+        setSession(currentSession);
+        setUser(currentSession.user);
         const profile = await fetchCurrentManagementProfile();
-        setManagementProfile(profile);
+        if (profile) {
+          setManagementProfile(profile);
+        }
       } else {
-        setManagementProfile(null);
+        // Crucial: Do NOT wipe active management credentials if stored session exists
+        const stored = getStoredManagementSession();
+        if (stored && stored.profile) {
+          setUser(stored.user);
+          setSession(stored.session);
+          setManagementProfile(stored.profile);
+        } else {
+          setUser(null);
+          setSession(null);
+          setManagementProfile(null);
+        }
       }
       setIsLoading(false);
     });

@@ -20,6 +20,8 @@ export const ROUTES = {
     EMAIL_HISTORY: '/management/email-history',
     AUDIT_LOG: '/management/audit-log',
     SETTINGS: '/management/settings',
+    VISITORS: '/management/visitors',
+    INQUIRIES: '/management/inquiries',
   },
   FUTURE: {}
 } as const;

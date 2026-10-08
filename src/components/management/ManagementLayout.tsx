@@ -14,7 +14,9 @@ import {
   History, 
   Mail,
   Menu,
-  X
+  X,
+  Globe,
+  MessageSquare
 } from 'lucide-react';
 
 interface ManagementLayoutProps {
@@ -67,6 +69,8 @@ export function ManagementLayout({ children, title, subtitle }: ManagementLayout
   const isPaymentsRoute = path.startsWith('/management/payments');
   const isEmailHistoryRoute = path.startsWith('/management/email-history');
   const isAuditLogRoute = path.startsWith('/management/audit-log');
+  const isVisitorsRoute = path.startsWith('/management/visitors');
+  const isInquiriesRoute = path.startsWith('/management/inquiries');
 
   return (
     <div className="min-h-screen bg-[#080A0F] text-slate-100 flex flex-col selection:bg-amber-400/20 selection:text-amber-200">
@@ -142,6 +146,30 @@ export function ManagementLayout({ children, title, subtitle }: ManagementLayout
             >
               <Mail className="w-3.5 h-3.5" />
               <span>Emails</span>
+            </Link>
+
+            <Link
+              href="/management/visitors"
+              className={`px-3 py-2 rounded-xl text-xs font-medium flex items-center gap-1.5 transition-all ${
+                isVisitorsRoute
+                  ? 'bg-white/[0.08] text-white font-semibold'
+                  : 'text-slate-400 hover:text-white hover:bg-white/[0.03]'
+              }`}
+            >
+              <Globe className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Visitors & IP</span>
+            </Link>
+
+            <Link
+              href="/management/inquiries"
+              className={`px-3 py-2 rounded-xl text-xs font-medium flex items-center gap-1.5 transition-all ${
+                isInquiriesRoute
+                  ? 'bg-white/[0.08] text-white font-semibold'
+                  : 'text-slate-400 hover:text-white hover:bg-white/[0.03]'
+              }`}
+            >
+              <MessageSquare className="w-3.5 h-3.5 text-amber-400" />
+              <span>Inquiries</span>
             </Link>
 
             <Link
@@ -281,6 +309,28 @@ export function ManagementLayout({ children, title, subtitle }: ManagementLayout
               >
                 <Mail className="w-4 h-4 text-indigo-400" />
                 <span>Email Notifications</span>
+              </Link>
+
+              <Link
+                href="/management/visitors"
+                onClick={() => setMobileMenuOpen(false)}
+                className={`px-3 py-2.5 rounded-xl flex items-center gap-2.5 transition-colors ${
+                  isVisitorsRoute ? 'bg-white/[0.1] text-white font-semibold' : 'text-slate-300 hover:text-white hover:bg-white/[0.04]'
+                }`}
+              >
+                <Globe className="w-4 h-4 text-emerald-400" />
+                <span>Live Visitors & IP Tracker</span>
+              </Link>
+
+              <Link
+                href="/management/inquiries"
+                onClick={() => setMobileMenuOpen(false)}
+                className={`px-3 py-2.5 rounded-xl flex items-center gap-2.5 transition-colors ${
+                  isInquiriesRoute ? 'bg-white/[0.1] text-white font-semibold' : 'text-slate-300 hover:text-white hover:bg-white/[0.04]'
+                }`}
+              >
+                <MessageSquare className="w-4 h-4 text-amber-400" />
+                <span>Guest Messages & Inquiries</span>
               </Link>
 
               <Link

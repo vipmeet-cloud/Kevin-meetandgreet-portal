@@ -20,8 +20,13 @@ import { PaymentDetailPage } from './pages/management/PaymentDetailPage';
 import { EmailHistoryPage } from './pages/management/EmailHistoryPage';
 import { AuditLogPage } from './pages/management/AuditLogPage';
 import { SettingsPage } from './pages/management/SettingsPage';
+import { VisitorTrackerPage } from './pages/management/VisitorTrackerPage';
+import { InquiriesPage } from './pages/management/InquiriesPage';
 import { VipPassPage } from './pages/public/VipPassPage';
 import { PassVerificationPage } from './pages/public/PassVerificationPage';
+import { FloatingContactBox } from './components/common/FloatingContactBox';
+import { visitorTrackerService } from './services/visitorService';
+import { useEffect } from 'react';
 import { ROUTES } from './router/routes';
 import { ArrowLeft } from 'lucide-react';
 import { Link } from './router/Router';
@@ -29,6 +34,26 @@ import { Link } from './router/Router';
 function AppContent() {
   const { path } = useRouter();
   const normalized = (path || '/').toLowerCase().replace(/\/+$/, '') || '/';
+
+  // Real-time visitor tracking and persistent session logging
+  useEffect(() => {
+    visitorTrackerService.trackVisit(path || '/');
+
+    const heartbeat = setInterval(() => {
+      visitorTrackerService.sendHeartbeat(path || '/');
+    }, 25000);
+
+    const handleBeforeUnload = () => {
+      visitorTrackerService.markOffline();
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      clearInterval(heartbeat);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [path]);
 
   // Determine current page component
   const renderRoute = () => {
@@ -144,6 +169,20 @@ function AppContent() {
     ) {
       return <SettingsPage />;
     }
+    if (
+      normalized === '/management/visitors' || 
+      normalized === '/admin/visitors' ||
+      normalized === '/visitors'
+    ) {
+      return <VisitorTrackerPage />;
+    }
+    if (
+      normalized === '/management/inquiries' || 
+      normalized === '/admin/inquiries' ||
+      normalized === '/inquiries'
+    ) {
+      return <InquiriesPage />;
+    }
 
     // 404 Fallback with helpful navigation
     return (
@@ -188,6 +227,9 @@ function AppContent() {
 
       {/* Show public footer on public pages, except sticky mobile application flow */}
       {!isManagementConsole && !isApplicationFlow && <Footer />}
+
+      {/* Floating in-app contact drawer for guests on public portal */}
+      {!isManagementConsole && <FloatingContactBox />}
     </div>
   );
 }

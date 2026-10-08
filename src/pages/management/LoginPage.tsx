@@ -172,10 +172,13 @@ export function LoginPage() {
               </div>
             </div>
 
-            <div className="flex items-center justify-end">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-[11px] text-slate-500 font-mono">
+                Encrypted Liaison Auth
+              </span>
               <button
                 type="button"
-                onClick={() => alert('Password recovery: Please contact the Lead Administrator or system security officer for credential reset.')}
+                onClick={() => setAuthError('Password recovery: Please contact the Lead Administrator at management.meet.greet@gmail.com for security credential resets.')}
                 className="text-xs text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
               >
                 Forgot password?
