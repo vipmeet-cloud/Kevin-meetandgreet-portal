@@ -1,22 +1,24 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { User, Session } from '@supabase/supabase-js';
-import { ManagementUserProfile, AuthState } from '../types/auth';
+import { ManagementUserProfile, AuthState, AuthStatus } from '../types/auth';
 import { getSupabaseClient, isSupabaseConfigured } from '../services/supabase';
 import { 
   loginManagement, 
   logoutManagement, 
   fetchCurrentManagementProfile,
-  getStoredManagementSession,
-  saveStoredManagementSession
+  updateManagementProfile,
+  subscribeToAuthChanges
 } from '../services/auth';
 
 interface AuthContextType extends AuthState {
   login: (email: string, password: string) => Promise<{ success: boolean; error: string | null }>;
   logout: () => Promise<void>;
   refreshAuth: () => Promise<void>;
+  updateProfile: (updates: { full_name?: string; phone_number?: string; avatar_url?: string }) => Promise<{ success: boolean; error: string | null }>;
 }
 
 const AuthContext = createContext<AuthContextType>({
+  status: 'AUTHENTICATING',
   user: null,
   session: null,
   managementProfile: null,
@@ -26,6 +28,7 @@ const AuthContext = createContext<AuthContextType>({
   login: async () => ({ success: false, error: 'Auth context not initialized' }),
   logout: async () => {},
   refreshAuth: async () => {},
+  updateProfile: async () => ({ success: false, error: 'Auth context not initialized' }),
 });
 
 export function useAuth() {
@@ -33,155 +36,155 @@ export function useAuth() {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [status, setStatus] = useState<AuthStatus>('AUTHENTICATING');
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [managementProfile, setManagementProfile] = useState<ManagementUserProfile | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Loading flag is true whenever authenticating session or loading profile
+  const isLoading = status === 'AUTHENTICATING' || status === 'AUTHENTICATED_LOADING_PROFILE';
+
+  // Management clearance verified strictly when profile is loaded and linked to the auth UUID
   const isAuthorizedManagement = Boolean(
+    status === 'AUTHENTICATED_PROFILE_LOADED' &&
     managementProfile &&
+    user &&
+    managementProfile.id === user.id &&
     ['administrator', 'manager', 'coordinator', 'reviewer'].includes(managementProfile.role)
   );
 
   const refreshAuth = useCallback(async () => {
-    // 1. Check local multi-tier stored session first (memory, sessionStorage, localStorage)
-    const stored = getStoredManagementSession();
-    if (stored && stored.profile) {
-      setUser(stored.user);
-      setSession(stored.session);
-      setManagementProfile(stored.profile);
-      setIsLoading(false);
-      return;
-    }
-
-    // 2. Check server session (/api/auth/session) for cross-browser & incognito resilience
-    try {
-      const res = await fetch('/api/auth/session');
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && data.profile) {
-          saveStoredManagementSession({ user: data.user, session: data.session, profile: data.profile });
-          setUser(data.user);
-          setSession(data.session);
-          setManagementProfile(data.profile);
-          setIsLoading(false);
-          return;
-        }
-      }
-    } catch {}
-
-    if (!isSupabaseConfigured()) {
-      setIsLoading(false);
-      return;
-    }
+    setError(null);
+    setStatus('AUTHENTICATING');
 
     const supabase = getSupabaseClient();
-    if (!supabase) {
-      setIsLoading(false);
+    if (!supabase || !isSupabaseConfigured()) {
+      setUser(null);
+      setSession(null);
+      setManagementProfile(null);
+      setStatus('UNAUTHENTICATED');
       return;
     }
 
     try {
+      // 1. Restore authenticated Supabase session
       const { data: sessionData, error: sessionErr } = await supabase.auth.getSession();
-      if (sessionErr || !sessionData.session) {
-        // Only clear if no stored session
-        const fallbackStored = getStoredManagementSession();
-        if (fallbackStored && fallbackStored.profile) {
-          setUser(fallbackStored.user);
-          setSession(fallbackStored.session);
-          setManagementProfile(fallbackStored.profile);
-        } else {
-          setUser(null);
-          setSession(null);
-          setManagementProfile(null);
-        }
-        setIsLoading(false);
+      
+      if (sessionErr || !sessionData.session?.user) {
+        setUser(null);
+        setSession(null);
+        setManagementProfile(null);
+        setStatus('UNAUTHENTICATED');
         return;
       }
 
-      setSession(sessionData.session);
-      setUser(sessionData.session.user);
+      const activeUser = sessionData.session.user;
+      const activeSession = sessionData.session;
+      setUser(activeUser);
+      setSession(activeSession);
 
-      // Verify management profile from management_users table
-      const profile = await fetchCurrentManagementProfile();
-      setManagementProfile(profile);
+      // 2. Transition state to AUTHENTICATED + LOADING MANAGEMENT PROFILE
+      setStatus('AUTHENTICATED_LOADING_PROFILE');
+
+      // 3. Fetch database-backed management profile permanently linked to activeUser.id
+      const profile = await fetchCurrentManagementProfile(activeUser.id, activeSession.access_token);
+
+      if (profile && ['administrator', 'manager', 'coordinator', 'reviewer'].includes(profile.role)) {
+        setManagementProfile(profile);
+        setStatus('AUTHENTICATED_PROFILE_LOADED');
+      } else {
+        setManagementProfile(null);
+        setStatus('UNAUTHENTICATED');
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Auth refresh failed';
       setError(message);
-    } finally {
-      setIsLoading(false);
+      setUser(null);
+      setSession(null);
+      setManagementProfile(null);
+      setStatus('UNAUTHENTICATED');
     }
   }, []);
 
   useEffect(() => {
     refreshAuth();
 
-    const supabase = getSupabaseClient();
-    if (!supabase) return;
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, currentSession) => {
+    // Supabase Auth listener for cross-tab, page-refresh, and token-refresh events
+    const { unsubscribe } = subscribeToAuthChanges(async (event, currentSession) => {
       if (currentSession?.user) {
-        setSession(currentSession);
         setUser(currentSession.user);
-        const profile = await fetchCurrentManagementProfile();
-        if (profile) {
+        setSession(currentSession);
+        setStatus('AUTHENTICATED_LOADING_PROFILE');
+
+        const profile = await fetchCurrentManagementProfile(currentSession.user.id, currentSession.access_token);
+        if (profile && ['administrator', 'manager', 'coordinator', 'reviewer'].includes(profile.role)) {
           setManagementProfile(profile);
-        }
-      } else {
-        // Crucial: Do NOT wipe active management credentials if stored session exists
-        const stored = getStoredManagementSession();
-        if (stored && stored.profile) {
-          setUser(stored.user);
-          setSession(stored.session);
-          setManagementProfile(stored.profile);
+          setStatus('AUTHENTICATED_PROFILE_LOADED');
         } else {
-          setUser(null);
-          setSession(null);
           setManagementProfile(null);
+          setStatus('UNAUTHENTICATED');
         }
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
+        setSession(null);
+        setManagementProfile(null);
+        setStatus('UNAUTHENTICATED');
       }
-      setIsLoading(false);
     });
 
     return () => {
-      subscription.unsubscribe();
+      unsubscribe();
     };
   }, [refreshAuth]);
 
   const login = async (email: string, password: string) => {
     setError(null);
-    setIsLoading(true);
+    setStatus('AUTHENTICATING');
 
     const result = await loginManagement(email, password);
 
-    if (result.error) {
-      setError(result.error);
-      setIsLoading(false);
-      return { success: false, error: result.error };
+    if (result.error || !result.user || !result.profile) {
+      const errText = result.error || 'Authentication credentials not recognized or insufficient privileges.';
+      setError(errText);
+      setStatus('UNAUTHENTICATED');
+      return { success: false, error: errText };
     }
 
     setUser(result.user);
     setSession(result.session);
     setManagementProfile(result.profile);
-    setIsLoading(false);
+    setStatus('AUTHENTICATED_PROFILE_LOADED');
 
     return { success: true, error: null };
   };
 
   const logout = async () => {
-    setIsLoading(true);
+    setStatus('AUTHENTICATING');
     await logoutManagement();
     setUser(null);
     setSession(null);
     setManagementProfile(null);
     setError(null);
-    setIsLoading(false);
+    setStatus('UNAUTHENTICATED');
+  };
+
+  const updateProfile = async (updates: { full_name?: string; phone_number?: string; avatar_url?: string }) => {
+    const res = await updateManagementProfile(updates);
+    if (res.error) {
+      return { success: false, error: res.error };
+    }
+    if (res.profile) {
+      setManagementProfile(res.profile);
+      return { success: true, error: null };
+    }
+    return { success: false, error: 'Failed to update profile' };
   };
 
   return (
     <AuthContext.Provider
       value={{
+        status,
         user,
         session,
         managementProfile,
@@ -191,9 +194,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         login,
         logout,
         refreshAuth,
+        updateProfile,
       }}
     >
       {children}
     </AuthContext.Provider>
   );
 }
+

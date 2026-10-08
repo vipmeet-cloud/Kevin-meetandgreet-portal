@@ -48,36 +48,9 @@ export function getSupabaseCredentials(): {
   url: string; 
   anonKey: string; 
   isConfigured: boolean; 
-  source: 'env' | 'runtime' | 'server' | 'fallback' | 'missing' 
+  source: 'env' | 'server' | 'fallback' | 'runtime' | 'missing' 
 } {
-  // 1. Check persistent localStorage & sessionStorage (User explicit overrides in Management Settings)
-  if (typeof window !== 'undefined') {
-    try {
-      const localUrl = localStorage.getItem(RUNTIME_SUPABASE_URL_KEY) || localStorage.getItem(LEGACY_STORAGE_URL_KEY);
-      const localKey = localStorage.getItem(RUNTIME_SUPABASE_ANON_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY_KEY);
-      if (localUrl && localKey && isValidCredential(localUrl, localKey)) {
-        return {
-          url: localUrl.trim(),
-          anonKey: localKey.trim(),
-          isConfigured: true,
-          source: 'runtime'
-        };
-      }
-
-      const sessionUrl = sessionStorage.getItem(RUNTIME_SUPABASE_URL_KEY) || sessionStorage.getItem(LEGACY_STORAGE_URL_KEY);
-      const sessionKey = sessionStorage.getItem(RUNTIME_SUPABASE_ANON_KEY) || sessionStorage.getItem(LEGACY_STORAGE_KEY_KEY);
-      if (sessionUrl && sessionKey && isValidCredential(sessionUrl, sessionKey)) {
-        return {
-          url: sessionUrl.trim(),
-          anonKey: sessionKey.trim(),
-          isConfigured: true,
-          source: 'runtime'
-        };
-      }
-    } catch {}
-  }
-
-  // 2. Check build-time / runtime environment variables
+  // 1. Check build-time / runtime environment variables first (Primary Single Source of Truth)
   const envUrl = import.meta.env.VITE_SUPABASE_URL || (import.meta.env as any).SUPABASE_URL;
   const envAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || (import.meta.env as any).SUPABASE_ANON_KEY;
   if (envUrl && envAnonKey && isValidCredential(envUrl, envAnonKey)) {
@@ -89,7 +62,7 @@ export function getSupabaseCredentials(): {
     };
   }
 
-  // 3. Check server-discovered credentials from /api/supabase/config
+  // 2. Check server-discovered credentials from /api/supabase/config
   if (serverDiscoveredUrl && serverDiscoveredKey && isValidCredential(serverDiscoveredUrl, serverDiscoveredKey)) {
     return {
       url: serverDiscoveredUrl.trim(),
@@ -99,7 +72,7 @@ export function getSupabaseCredentials(): {
     };
   }
 
-  // 4. Guaranteed project fallback for 100% reliability on Vercel
+  // 3. Guaranteed production project fallback (ensures 100% cross-browser parity on Vercel and local)
   if (isValidCredential(FALLBACK_SUPABASE_URL, FALLBACK_SUPABASE_ANON_KEY)) {
     return {
       url: FALLBACK_SUPABASE_URL,
@@ -107,6 +80,22 @@ export function getSupabaseCredentials(): {
       isConfigured: true,
       source: 'fallback'
     };
+  }
+
+  // 4. Runtime overrides (if any explicit developer debugging)
+  if (typeof window !== 'undefined') {
+    try {
+      const localUrl = localStorage.getItem(RUNTIME_SUPABASE_URL_KEY);
+      const localKey = localStorage.getItem(RUNTIME_SUPABASE_ANON_KEY);
+      if (localUrl && localKey && isValidCredential(localUrl, localKey)) {
+        return {
+          url: localUrl.trim(),
+          anonKey: localKey.trim(),
+          isConfigured: true,
+          source: 'runtime'
+        };
+      }
+    } catch {}
   }
 
   return {

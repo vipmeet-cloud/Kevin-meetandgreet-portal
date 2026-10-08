@@ -9,6 +9,7 @@ export type MeetGreetSettings = Database['public']['Tables']['meet_greet_setting
   payment_deadline_hours?: number | null;
   refund_policy?: string | null;
   cancellation_policy?: string | null;
+  payment_method_name?: string | null;
   payment_instructions?: string | null;
   payment_methods?: Array<{ name: string; details: string }> | null;
 

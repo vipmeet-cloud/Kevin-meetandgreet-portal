@@ -19,13 +19,41 @@ function getStoredLocalSettings(): MeetGreetSettings | null {
   return null;
 }
 
-function saveStoredLocalSettings(data: any): MeetGreetSettings {
-  const existingFavicon = (typeof window !== 'undefined' ? localStorage.getItem(FAVICON_KEY) : null) || '/favicon.svg';
+function extractConfigFromInstructions(rawInstructions?: string | null): {
+  cleanInstructions: string;
+  config: Record<string, any>;
+} {
+  if (!rawInstructions) return { cleanInstructions: '', config: {} };
+
+  const match = rawInstructions.match(/<!--VIP_CONFIG:(.*?)-->/);
+  if (!match) {
+    return { cleanInstructions: rawInstructions.trim(), config: {} };
+  }
+
+  try {
+    const parsed = JSON.parse(match[1]);
+    const clean = rawInstructions.replace(/<!--VIP_CONFIG:(.*?)-->/, '').trim();
+    return { cleanInstructions: clean, config: parsed };
+  } catch {
+    return { cleanInstructions: rawInstructions.trim(), config: {} };
+  }
+}
+
+function packInstructionsWithConfig(cleanInstructions: string, config: Record<string, any>): string {
+  const jsonStr = JSON.stringify(config);
+  const clean = (cleanInstructions || '').trim();
+  return clean ? `${clean}\n\n<!--VIP_CONFIG:${jsonStr}-->` : `<!--VIP_CONFIG:${jsonStr}-->`;
+}
+
+function unpackSettingsRecord(data: any): MeetGreetSettings {
+  const { cleanInstructions, config } = extractConfigFromInstructions(data.payment_instructions);
+
+  const existingFavicon = config.site_favicon_url || data.site_favicon_url || '/favicon.svg';
 
   const record: MeetGreetSettings = {
     id: data.id || `set_${Date.now()}`,
     created_at: data.created_at || new Date().toISOString(),
-    updated_at: new Date().toISOString(),
+    updated_at: data.updated_at || new Date().toISOString(),
     celebrity_name: data.celebrity_name || 'Kevin Costner',
     celebrity_title: data.celebrity_title || 'Academy Award-Winning Actor & Filmmaker',
     celebrity_bio: data.celebrity_bio || 'Legendary Hollywood actor, director, and producer renowned for iconic roles across cinema history.',
@@ -42,39 +70,47 @@ function saveStoredLocalSettings(data: any): MeetGreetSettings {
     support_whatsapp: data.support_whatsapp || null,
     is_active: data.is_active !== undefined ? data.is_active : true,
     fee_name: data.fee_name || 'VIP Private Audience & Credentials Fee',
-    fee_amount: data.fee_amount !== undefined ? data.fee_amount : 2500,
+    fee_amount: data.fee_amount !== undefined && data.fee_amount !== null ? Number(data.fee_amount) : 2500,
     fee_currency: data.fee_currency || 'USD',
     fee_description: data.fee_description || 'Exclusive VIP accreditation fee for private salon audience.',
     fee_inclusions: data.fee_inclusions || 'Includes private audience session, verified attendee credential, and security concierge support.',
     payment_deadline_hours: data.payment_deadline_hours || 48,
     refund_policy: data.refund_policy || 'Full refund available up to 72 hours prior to scheduled session.',
     cancellation_policy: data.cancellation_policy || 'Cancellations within 48 hours are subject to management review.',
-    payment_instructions: data.payment_instructions || 'Please remit payment via bank transfer using your reference code.',
-    // Bitcoin & Cryptocurrency
-    bitcoin_enabled: data.bitcoin_enabled !== undefined ? data.bitcoin_enabled : true,
-    bitcoin_wallet_address: data.bitcoin_wallet_address || 'bc1q9x405gxy5n0yrf2493p83kkfjhx0wlhm7q885g',
-    bitcoin_image_url: data.bitcoin_image_url || null,
-    bitcoin_network: data.bitcoin_network || 'Bitcoin (BTC)',
-    bitcoin_instructions: data.bitcoin_instructions || 'Transfer the exact fee amount to our verified Bitcoin wallet address below or scan the QR code. Keep your Transaction ID (TXID) for confirmation.',
-    // Gift Card
-    gift_card_enabled: data.gift_card_enabled !== undefined ? data.gift_card_enabled : true,
-    gift_card_types: data.gift_card_types || 'Apple Gift Card, Steam, Amazon, Vanilla Visa, Razer Gold',
-    gift_card_instructions: data.gift_card_instructions || 'Purchase an approved gift card matching your application fee amount. Enter the claim code / PIN and upload clear photos of the front and back of the card.',
+    payment_method_name: data.payment_method_name || 'Bank Wire Transfer',
+    payment_instructions: cleanInstructions || 'Please remit payment via bank transfer using your reference code.',
+    
+    // Bitcoin & Cryptocurrency (Restored from database metadata)
+    bitcoin_enabled: config.bitcoin_enabled !== undefined ? config.bitcoin_enabled : (data.bitcoin_enabled !== undefined ? data.bitcoin_enabled : true),
+    bitcoin_wallet_address: config.bitcoin_wallet_address || data.bitcoin_wallet_address || 'bc1q9x405gxy5n0yrf2493p83kkfjhx0wlhm7q885g',
+    bitcoin_image_url: config.bitcoin_image_url || data.bitcoin_image_url || null,
+    bitcoin_network: config.bitcoin_network || data.bitcoin_network || 'Bitcoin (BTC)',
+    bitcoin_instructions: config.bitcoin_instructions || data.bitcoin_instructions || 'Transfer the exact fee amount to our verified Bitcoin wallet address below or scan the QR code. Keep your Transaction ID (TXID) for confirmation.',
+    
+    // Gift Card (Restored from database metadata)
+    gift_card_enabled: config.gift_card_enabled !== undefined ? config.gift_card_enabled : (data.gift_card_enabled !== undefined ? data.gift_card_enabled : true),
+    gift_card_types: config.gift_card_types || data.gift_card_types || 'Apple Gift Card, Steam, Amazon, Vanilla Visa, Razer Gold',
+    gift_card_instructions: config.gift_card_instructions || data.gift_card_instructions || 'Purchase an approved gift card matching your application fee amount. Enter the claim code / PIN and upload clear photos of the front and back of the card.',
+    
     // Favicon & Branding Identity
-    site_favicon_url: data.site_favicon_url || existingFavicon,
+    site_favicon_url: existingFavicon,
+    
     // Cloudinary
-    cloudinary_cloud_name: data.cloudinary_cloud_name || 'jt6qb4ke',
-    cloudinary_upload_preset: data.cloudinary_upload_preset || 'Vipmeet',
+    cloudinary_cloud_name: config.cloudinary_cloud_name || data.cloudinary_cloud_name || 'jt6qb4ke',
+    cloudinary_upload_preset: config.cloudinary_upload_preset || data.cloudinary_upload_preset || 'Vipmeet',
+    
     // Supabase
     supabase_url: data.supabase_url || null,
     supabase_anon_key: data.supabase_anon_key || null,
   };
 
   try {
-    localStorage.setItem(LOCAL_SETTINGS_KEY, JSON.stringify(record));
-    if (record.site_favicon_url) {
-      localStorage.setItem(FAVICON_KEY, record.site_favicon_url);
-      applyFavicon(record.site_favicon_url);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(LOCAL_SETTINGS_KEY, JSON.stringify(record));
+      if (record.site_favicon_url) {
+        localStorage.setItem(FAVICON_KEY, record.site_favicon_url);
+        applyFavicon(record.site_favicon_url);
+      }
     }
   } catch {}
 
@@ -97,22 +133,21 @@ export async function fetchActiveMeetGreetSettings(): Promise<{
         .maybeSingle();
 
       if (!error && data) {
-        const mapped = saveStoredLocalSettings(data);
+        const mapped = unpackSettingsRecord(data);
         if (mapped.site_favicon_url) applyFavicon(mapped.site_favicon_url);
         return { data: mapped, error: null };
       }
     } catch {}
   }
 
-  // Check localStorage fallback
+  // Fallback cache if completely offline
   const local = getStoredLocalSettings();
   if (local) {
     if (local.site_favicon_url) applyFavicon(local.site_favicon_url);
     return { data: local, error: null };
   }
 
-  // Default seed fallback
-  const seeded = saveStoredLocalSettings({});
+  const seeded = unpackSettingsRecord({});
   if (seeded.site_favicon_url) applyFavicon(seeded.site_favicon_url);
   return { data: seeded, error: null };
 }
@@ -132,11 +167,13 @@ export async function fetchManagementMeetGreetSettings(): Promise<{
         .maybeSingle();
 
       if (!error && data) {
-        const mapped = saveStoredLocalSettings(data);
+        const mapped = unpackSettingsRecord(data);
         if (mapped.site_favicon_url) applyFavicon(mapped.site_favicon_url);
         return { data: mapped, error: null };
       }
-    } catch {}
+    } catch (err: unknown) {
+      console.warn('Supabase fetch settings error:', err);
+    }
   }
 
   const local = getStoredLocalSettings();
@@ -145,7 +182,7 @@ export async function fetchManagementMeetGreetSettings(): Promise<{
     return { data: local, error: null };
   }
 
-  const seeded = saveStoredLocalSettings({});
+  const seeded = unpackSettingsRecord({});
   if (seeded.site_favicon_url) applyFavicon(seeded.site_favicon_url);
   return { data: seeded, error: null };
 }
@@ -157,7 +194,32 @@ export async function saveMeetGreetSettings(
   data: MeetGreetSettings | null;
   error: string | null;
 }> {
-  const payload = {
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    return { data: null, error: 'Database client not connected.' };
+  }
+
+  // Pack secondary configs into metadata tag inside instructions
+  const configMetadata = {
+    bitcoin_enabled: formData.bitcoin_enabled ?? true,
+    bitcoin_wallet_address: formData.bitcoin_wallet_address?.trim() || 'bc1q9v3n92x7wz4k8t5y2m0p1a3d6f8h0j4l7c9s2x',
+    bitcoin_image_url: formData.bitcoin_image_url?.trim() || null,
+    bitcoin_network: formData.bitcoin_network?.trim() || 'Bitcoin (BTC)',
+    bitcoin_instructions: formData.bitcoin_instructions?.trim() || null,
+    gift_card_enabled: formData.gift_card_enabled ?? true,
+    gift_card_types: formData.gift_card_types?.trim() || 'Apple Gift Card, Steam, Amazon, Vanilla Visa, Razer Gold',
+    gift_card_instructions: formData.gift_card_instructions?.trim() || null,
+    cloudinary_cloud_name: formData.cloudinary_cloud_name?.trim() || 'jt6qb4ke',
+    cloudinary_upload_preset: formData.cloudinary_upload_preset?.trim() || 'Vipmeet',
+    site_favicon_url: formData.site_favicon_url?.trim() || '/favicon.svg',
+  };
+
+  const packedInstructions = packInstructionsWithConfig(
+    formData.payment_instructions || '',
+    configMetadata
+  );
+
+  const basePayload = {
     celebrity_name: formData.celebrity_name.trim(),
     celebrity_title: formData.celebrity_title.trim(),
     celebrity_bio: formData.celebrity_bio.trim(),
@@ -174,123 +236,69 @@ export async function saveMeetGreetSettings(
     support_whatsapp: formData.support_whatsapp?.trim() || null,
     is_active: formData.is_active,
 
-    // Phase 4 Fee fields
-    fee_name: formData.fee_name?.trim() || null,
-    fee_amount: formData.fee_amount !== '' && formData.fee_amount !== undefined ? Number(formData.fee_amount) : null,
+    // Phase 4 Fee fields - strictly saved to Supabase
+    fee_name: formData.fee_name?.trim() || 'VIP Private Audience Credentials Fee',
+    fee_amount: formData.fee_amount !== '' && formData.fee_amount !== undefined ? Number(formData.fee_amount) : 2500,
     fee_currency: formData.fee_currency?.trim() || 'USD',
     fee_description: formData.fee_description?.trim() || null,
     fee_inclusions: formData.fee_inclusions?.trim() || null,
     payment_deadline_hours: formData.payment_deadline_hours !== '' && formData.payment_deadline_hours !== undefined ? Number(formData.payment_deadline_hours) : 48,
     refund_policy: formData.refund_policy?.trim() || null,
     cancellation_policy: formData.cancellation_policy?.trim() || null,
-    payment_instructions: formData.payment_instructions?.trim() || null,
-
-    // Bitcoin & Cryptocurrency
-    bitcoin_enabled: formData.bitcoin_enabled ?? true,
-    bitcoin_wallet_address: formData.bitcoin_wallet_address?.trim() || null,
-    bitcoin_image_url: formData.bitcoin_image_url?.trim() || null,
-    bitcoin_network: formData.bitcoin_network?.trim() || 'Bitcoin (BTC)',
-    bitcoin_instructions: formData.bitcoin_instructions?.trim() || null,
-
-    // Gift Card
-    gift_card_enabled: formData.gift_card_enabled ?? true,
-    gift_card_types: formData.gift_card_types?.trim() || 'Apple Gift Card, Steam, Amazon, Vanilla Visa, Razer Gold',
-    gift_card_instructions: formData.gift_card_instructions?.trim() || null,
-
-    // Cloudinary Direct Config
-    cloudinary_cloud_name: formData.cloudinary_cloud_name?.trim() || 'jt6qb4ke',
-    cloudinary_upload_preset: formData.cloudinary_upload_preset?.trim() || 'Vipmeet',
-
-    // Favicon & Visual Identity
-    site_favicon_url: formData.site_favicon_url?.trim() || '/favicon.svg',
-
-    // Supabase
-    supabase_url: formData.supabase_url?.trim() || null,
-    supabase_anon_key: formData.supabase_anon_key?.trim() || null,
+    payment_method_name: 'Bank Wire Transfer',
+    payment_instructions: packedInstructions,
+    updated_at: new Date().toISOString(),
   };
 
-  // Sync Cloudinary and Supabase configs to runtime storage
-  if (typeof window !== 'undefined') {
-    setCloudinaryCustomConfig(payload.cloudinary_cloud_name, payload.cloudinary_upload_preset);
-    if (payload.supabase_url && payload.supabase_anon_key) {
-      setRuntimeSupabaseCredentials(payload.supabase_url, payload.supabase_anon_key);
-    }
-    if (payload.site_favicon_url) {
-      localStorage.setItem(FAVICON_KEY, payload.site_favicon_url);
-      applyFavicon(payload.site_favicon_url);
-    }
-  }
+  try {
+    // 1. Try updating existing active row by ID or locate first row
+    let targetRowId = existingId && isUuid(existingId) ? existingId : null;
 
-  const localSaved = saveStoredLocalSettings({ ...payload, id: existingId });
+    if (!targetRowId) {
+      const { data: activeRow } = await (supabase.from('meet_greet_settings') as any)
+        .select('id')
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-  const supabase = getSupabaseClient();
-  if (supabase) {
-    try {
-      // Stripped payload for table (in case schema doesn't have custom columns yet)
-      const basePayload: any = {
-        celebrity_name: payload.celebrity_name,
-        celebrity_title: payload.celebrity_title,
-        celebrity_bio: payload.celebrity_bio,
-        celebrity_image_url: payload.celebrity_image_url,
-        event_name: payload.event_name,
-        event_description: payload.event_description,
-        hero_title: payload.hero_title,
-        hero_subtitle: payload.hero_subtitle,
-        event_logo_url: payload.event_logo_url,
-        brand_primary_color: payload.brand_primary_color,
-        brand_secondary_color: payload.brand_secondary_color,
-        support_email: payload.support_email,
-        support_phone: payload.support_phone,
-        support_whatsapp: payload.support_whatsapp,
-        is_active: payload.is_active,
-        updated_at: new Date().toISOString(),
-      };
-
-      if (existingId && isUuid(existingId)) {
-        const { data, error } = await (supabase.from('meet_greet_settings') as any)
-          .update(basePayload)
-          .eq('id', existingId)
-          .select('*')
-          .single();
-
-        if (!error && data) {
-          const merged = saveStoredLocalSettings({ ...data, ...payload });
-          return { data: merged, error: null };
-        }
-      } else {
-        // Try updating existing active row if one exists
-        const { data: existingActive } = await (supabase.from('meet_greet_settings') as any)
-          .select('id')
-          .limit(1)
-          .maybeSingle();
-
-        if (existingActive?.id && isUuid(existingActive.id)) {
-          const { data, error } = await (supabase.from('meet_greet_settings') as any)
-            .update(basePayload)
-            .eq('id', existingActive.id)
-            .select('*')
-            .single();
-
-          if (!error && data) {
-            const merged = saveStoredLocalSettings({ ...data, ...payload });
-            return { data: merged, error: null };
-          }
-        } else {
-          const { data, error } = await (supabase.from('meet_greet_settings') as any)
-            .insert(basePayload)
-            .select('*')
-            .single();
-
-          if (!error && data) {
-            const merged = saveStoredLocalSettings({ ...data, ...payload });
-            return { data: merged, error: null };
-          }
-        }
+      if (activeRow?.id) {
+        targetRowId = activeRow.id;
       }
-    } catch (err: unknown) {
-      console.warn('Supabase settings save notice, using local store:', err);
     }
-  }
 
-  return { data: localSaved, error: null };
+    let savedData: any = null;
+
+    if (targetRowId) {
+      const { data, error } = await (supabase.from('meet_greet_settings') as any)
+        .update(basePayload)
+        .eq('id', targetRowId)
+        .select('*')
+        .single();
+
+      if (error) {
+        return { data: null, error: `Failed to update settings in Supabase: ${error.message}` };
+      }
+      savedData = data;
+    } else {
+      const { data, error } = await (supabase.from('meet_greet_settings') as any)
+        .insert(basePayload)
+        .select('*')
+        .single();
+
+      if (error) {
+        return { data: null, error: `Failed to insert settings into Supabase: ${error.message}` };
+      }
+      savedData = data;
+    }
+
+    // Unpack database record and update runtime favicon
+    const result = unpackSettingsRecord(savedData);
+    if (result.site_favicon_url) {
+      applyFavicon(result.site_favicon_url);
+    }
+    return { data: result, error: null };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Database update failed';
+    return { data: null, error: msg };
+  }
 }

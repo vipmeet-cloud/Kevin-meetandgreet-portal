@@ -104,12 +104,8 @@ export function SettingsForm() {
       if (error) {
         setErrorMessage(error);
       } else if (data) {
-        const storedCloudName = typeof window !== 'undefined' ? localStorage.getItem('aura_vip_cloudinary_cloud_name') : null;
-        const storedPreset = typeof window !== 'undefined' ? localStorage.getItem('aura_vip_cloudinary_upload_preset') : null;
-        const storedFavicon = typeof window !== 'undefined' ? localStorage.getItem('aura_vip_site_favicon_url') : null;
-
         setExistingId(data.id);
-        const resolvedFavicon = data.site_favicon_url || storedFavicon || '/favicon.svg';
+        const resolvedFavicon = data.site_favicon_url || '/favicon.svg';
         applyFavicon(resolvedFavicon);
 
         setFormData({
@@ -129,10 +125,10 @@ export function SettingsForm() {
           support_whatsapp: data.support_whatsapp || '',
           is_active: data.is_active ?? true,
 
-          fee_name: data.fee_name || 'VIP Meet & Greet Pass',
+          fee_name: data.fee_name || 'VIP Private Audience Credentials Fee',
           fee_amount: data.fee_amount !== null && data.fee_amount !== undefined ? data.fee_amount : 2500,
           fee_currency: data.fee_currency || 'USD',
-          fee_description: data.fee_description || 'VIP Meet & Greet Pass, private one-on-one meeting with the celebrity guest, professional photo session, and personal host accompaniment.',
+          fee_description: data.fee_description || 'VIP Private Audience Credentials Fee, private one-on-one salon audience with the celebrity guest, verified accreditation, and personal host accompaniment.',
           fee_inclusions: data.fee_inclusions || '1. Admission to the VIP Guest Area\n2. One-on-one meeting with the Celebrity Guest\n3. High-resolution photos & signed keepsake\n4. VIP Pass and venue entry\n5. Dedicated VIP host accompaniment',
           payment_deadline_hours: data.payment_deadline_hours || 48,
           refund_policy: data.refund_policy || 'Full refund provided if the meeting is cancelled or rescheduled by management. If you cannot attend, please let us know at least 72 hours in advance for a full refund.',
@@ -149,8 +145,8 @@ export function SettingsForm() {
           gift_card_types: data.gift_card_types || 'Apple Gift Card, Steam, Amazon, Vanilla Visa, Razer Gold',
           gift_card_instructions: data.gift_card_instructions || 'Purchase an approved gift card matching your application fee amount. Enter the claim code / PIN and upload clear photos of the front and back of the card.',
 
-          cloudinary_cloud_name: storedCloudName || (data as any).cloudinary_cloud_name || cloudCfg.cloudName || 'jt6qb4ke',
-          cloudinary_upload_preset: storedPreset || (data as any).cloudinary_upload_preset || cloudCfg.uploadPreset || 'Vipmeet',
+          cloudinary_cloud_name: (data as any).cloudinary_cloud_name || cloudCfg.cloudName || 'jt6qb4ke',
+          cloudinary_upload_preset: (data as any).cloudinary_upload_preset || cloudCfg.uploadPreset || 'Vipmeet',
 
           site_favicon_url: resolvedFavicon,
 

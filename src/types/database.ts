@@ -16,6 +16,8 @@ export interface Database {
           id: string;
           email: string;
           full_name: string | null;
+          avatar_url?: string | null;
+          phone_number?: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -23,6 +25,8 @@ export interface Database {
           id: string;
           email: string;
           full_name?: string | null;
+          avatar_url?: string | null;
+          phone_number?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -30,6 +34,8 @@ export interface Database {
           id?: string;
           email?: string;
           full_name?: string | null;
+          avatar_url?: string | null;
+          phone_number?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -37,25 +43,31 @@ export interface Database {
       management_users: {
         Row: {
           id: string;
+          user_id: string;
           role: ManagementRole;
-          full_name: string;
           email: string;
+          is_active: boolean;
+          assigned_by?: string | null;
           created_at: string;
           updated_at: string;
         };
         Insert: {
-          id: string;
+          id?: string;
+          user_id: string;
           role: ManagementRole;
-          full_name: string;
           email: string;
+          is_active?: boolean;
+          assigned_by?: string | null;
           created_at?: string;
           updated_at?: string;
         };
         Update: {
           id?: string;
+          user_id?: string;
           role?: ManagementRole;
-          full_name?: string;
           email?: string;
+          is_active?: boolean;
+          assigned_by?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -78,6 +90,16 @@ export interface Database {
           support_phone: string | null;
           support_whatsapp: string | null;
           is_active: boolean;
+          fee_name?: string | null;
+          fee_amount?: number | null;
+          fee_currency?: string | null;
+          fee_description?: string | null;
+          fee_inclusions?: string | null;
+          payment_deadline_hours?: number | null;
+          refund_policy?: string | null;
+          cancellation_policy?: string | null;
+          payment_method_name?: string | null;
+          payment_instructions?: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -98,6 +120,16 @@ export interface Database {
           support_phone?: string | null;
           support_whatsapp?: string | null;
           is_active?: boolean;
+          fee_name?: string | null;
+          fee_amount?: number | null;
+          fee_currency?: string | null;
+          fee_description?: string | null;
+          fee_inclusions?: string | null;
+          payment_deadline_hours?: number | null;
+          refund_policy?: string | null;
+          cancellation_policy?: string | null;
+          payment_method_name?: string | null;
+          payment_instructions?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -118,6 +150,16 @@ export interface Database {
           support_phone?: string | null;
           support_whatsapp?: string | null;
           is_active?: boolean;
+          fee_name?: string | null;
+          fee_amount?: number | null;
+          fee_currency?: string | null;
+          fee_description?: string | null;
+          fee_inclusions?: string | null;
+          payment_deadline_hours?: number | null;
+          refund_policy?: string | null;
+          cancellation_policy?: string | null;
+          payment_method_name?: string | null;
+          payment_instructions?: string | null;
           created_at?: string;
           updated_at?: string;
         };

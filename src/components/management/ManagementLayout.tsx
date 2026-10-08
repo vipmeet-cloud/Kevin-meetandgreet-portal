@@ -26,22 +26,27 @@ interface ManagementLayoutProps {
 }
 
 export function ManagementLayout({ children, title, subtitle }: ManagementLayoutProps) {
-  const { managementProfile, isAuthorizedManagement, isLoading, logout } = useAuth();
+  const { status, managementProfile, isAuthorizedManagement, isLoading, logout } = useAuth();
   const { path } = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  if (isLoading) {
+  if (isLoading || status === 'AUTHENTICATING' || status === 'AUTHENTICATED_LOADING_PROFILE') {
     return (
       <div className="min-h-screen bg-[#080A0F] flex items-center justify-center">
         <div className="text-center space-y-3 font-mono text-xs text-slate-400">
           <div className="w-8 h-8 border-2 border-amber-400 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p>Verifying Management Clearance...</p>
+          <p className="text-slate-300 font-medium">
+            {status === 'AUTHENTICATED_LOADING_PROFILE' 
+              ? 'Restoring Database Management Profile & Settings...' 
+              : 'Verifying Supabase Management Clearance...'}
+          </p>
+          <p className="text-[10px] text-slate-500 font-mono">Row-Level Security (RLS) identity verification</p>
         </div>
       </div>
     );
   }
 
-  if (!isAuthorizedManagement || !managementProfile) {
+  if (status === 'UNAUTHENTICATED' || !isAuthorizedManagement || !managementProfile) {
     return (
       <div className="min-h-screen bg-[#080A0F] flex items-center justify-center p-4">
         <div className="max-w-md w-full p-8 rounded-3xl bg-[#0E1118] border border-white/[0.08] text-center space-y-5 shadow-2xl animate-fadeIn">

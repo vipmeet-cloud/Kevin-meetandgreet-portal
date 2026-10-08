@@ -496,120 +496,178 @@ app.get('/api/setup/schema', (_req: Request, res: Response) => {
 });
 
 // ============================================================================
-// SERVER AUTH SESSION MANAGEMENT (Cross-Browser, Incognito & iFrame Resilient)
+// SERVER AUTH MANAGEMENT & REPAIR (Backed by Supabase Auth)
 // ============================================================================
 
-let serverAuthSession: {
-  user: any;
-  session: any;
-  profile: any;
-  token: string;
-  loginTime: string;
-} | null = null;
-
-const VALID_MANAGEMENT_EMAILS = [
+const AUTHORIZED_MANAGEMENT_EMAILS = [
   'management.meet.greet@gmail.com',
   'management.meet&greet@gmail.com',
   'admin@vipmeetgreet.com',
   'lead.administrator@vipmeet.com'
 ];
 
-app.post(['/api/auth/login', '/auth/login'], (req: Request, res: Response) => {
+/**
+ * Ensures the authenticated Supabase Auth user is correctly provisioned
+ * in public.management_users and public.profiles with their real Auth UUID.
+ */
+app.post(['/api/auth/ensure-management', '/auth/ensure-management'], async (req: Request, res: Response) => {
   try {
-    const { email, password } = req.body || {};
-    const cleanEmail = (email || '').trim().toLowerCase();
-    const cleanPass = (password || '').trim();
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.substring(7) : (req.body?.token || '');
 
-    // Check credentials (flexible for lead management and custom administrative logins)
-    const isKnownEmail = 
-      VALID_MANAGEMENT_EMAILS.some(e => e.toLowerCase() === cleanEmail) ||
-      cleanEmail.includes('management') ||
-      cleanEmail.includes('admin');
+    if (!token) {
+      return res.status(401).json({ success: false, error: 'No authorization token provided.' });
+    }
 
-    const isKnownPassword = 
-      cleanPass === 'Management@KevinCostner2026' ||
-      cleanPass === 'Management@Yungblud2026' ||
-      cleanPass === 'Management@2026' ||
-      cleanPass === 'Management2026!' ||
-      cleanPass === 'admin' ||
-      cleanPass === 'password' ||
-      cleanPass.toLowerCase().includes('management') ||
-      cleanPass.toLowerCase().includes('2026');
+    if (!serverSupabase) {
+      return res.status(503).json({ success: false, error: 'Database service is not configured on server.' });
+    }
 
-    if (!isKnownEmail || !isKnownPassword) {
-      return res.status(401).json({ 
-        success: false, 
-        error: 'Invalid management email or password.' 
+    const { data: { user }, error: userErr } = await serverSupabase.auth.getUser(token);
+    if (userErr || !user) {
+      return res.status(401).json({ success: false, error: 'Invalid or expired authentication session.' });
+    }
+
+    const userEmail = (user.email || '').toLowerCase().trim();
+    const isAuthorizedEmail = 
+      AUTHORIZED_MANAGEMENT_EMAILS.some(e => e.toLowerCase() === userEmail) ||
+      userEmail.includes('management') ||
+      userEmail.includes('admin');
+
+    if (!isAuthorizedEmail) {
+      // Check if user is already in management_users table
+      const { data: existingMgmt } = await serverSupabase
+        .from('management_users')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .maybeSingle();
+
+      if (!existingMgmt) {
+        return res.status(403).json({ success: false, error: 'User is not provisioned as management personnel.' });
+      }
+    }
+
+    // 1. Ensure public.profiles record
+    const { data: existingProfile } = await serverSupabase
+      .from('profiles')
+      .select('*')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    let profileFullName = existingProfile?.full_name || user.user_metadata?.full_name || 'Executive VIP Event Management';
+    if (!existingProfile) {
+      await serverSupabase.from('profiles').insert({
+        id: user.id,
+        email: user.email,
+        full_name: profileFullName,
+        updated_at: new Date().toISOString()
       });
     }
 
-    const token = `sess_mgmt_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-    const user = {
-      id: 'admin_primary_management_001',
-      email: cleanEmail || 'management.meet.greet@gmail.com',
-      app_metadata: { provider: 'email' },
-      user_metadata: { full_name: 'Executive VIP Event Management' },
-      aud: 'authenticated',
-      created_at: '2026-01-01T00:00:00.000Z',
-      phone: '',
-      role: 'authenticated',
-      updated_at: new Date().toISOString(),
-    };
+    // 2. Ensure public.management_users record permanently linked to user.id
+    const { data: existingMgmtUser } = await serverSupabase
+      .from('management_users')
+      .select('*')
+      .eq('user_id', user.id)
+      .maybeSingle();
 
-    const session = {
-      access_token: token,
-      token_type: 'bearer',
-      expires_in: 86400 * 7,
-      expires_at: Math.floor(Date.now() / 1000) + 86400 * 7,
-      refresh_token: `refresh_${Date.now()}`,
-      user,
-    };
+    let role = existingMgmtUser?.role || 'administrator';
+    if (!existingMgmtUser) {
+      const { data: newMgmt } = await serverSupabase.from('management_users').insert({
+        user_id: user.id,
+        email: user.email,
+        role: 'administrator',
+        is_active: true,
+        updated_at: new Date().toISOString()
+      }).select().single();
+      if (newMgmt) role = newMgmt.role;
+    }
 
-    const profile = {
-      id: 'admin_primary_management_001',
-      email: cleanEmail || 'management.meet.greet@gmail.com',
-      full_name: 'Executive VIP Event Management',
-      role: 'administrator',
-      created_at: '2026-01-01T00:00:00.000Z',
-      updated_at: new Date().toISOString(),
-    };
-
-    serverAuthSession = {
-      user,
-      session,
-      profile,
-      token,
-      loginTime: new Date().toISOString(),
+    const verifiedProfile = {
+      id: user.id,
+      user_id: user.id,
+      email: user.email,
+      full_name: profileFullName,
+      role,
+      created_at: existingProfile?.created_at || user.created_at,
+      updated_at: existingProfile?.updated_at || new Date().toISOString()
     };
 
     return res.json({
       success: true,
-      user,
-      session,
-      profile,
-      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role
+      },
+      profile: verifiedProfile
     });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Server auth error';
+    const msg = err instanceof Error ? err.message : 'Failed to verify management clearance';
     return res.status(500).json({ success: false, error: msg });
   }
 });
 
-app.get(['/api/auth/session', '/auth/session'], (_req: Request, res: Response) => {
-  if (serverAuthSession) {
+/**
+ * Developer diagnostic endpoint for management database status
+ */
+app.get(['/api/auth/diagnostic', '/auth/diagnostic'], async (req: Request, res: Response) => {
+  try {
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.substring(7) : '';
+
+    let authenticatedUserId: string | null = null;
+    let authenticatedEmail: string | null = null;
+
+    if (token && serverSupabase) {
+      const { data: { user } } = await serverSupabase.auth.getUser(token);
+      if (user) {
+        authenticatedUserId = user.id;
+        authenticatedEmail = user.email || null;
+      }
+    }
+
+    const projectUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || 'https://fiwsjwpyzhltzrdnpcrf.supabase.co';
+    let projectHost = '';
+    try {
+      projectHost = new URL(projectUrl).host;
+    } catch {
+      projectHost = projectUrl;
+    }
+
+    let managementUsersCount = 0;
+    let profilesCount = 0;
+    let settingsCount = 0;
+
+    if (serverSupabase) {
+      const { count: mCount } = await serverSupabase.from('management_users').select('*', { count: 'exact', head: true });
+      managementUsersCount = mCount || 0;
+      const { count: pCount } = await serverSupabase.from('profiles').select('*', { count: 'exact', head: true });
+      profilesCount = pCount || 0;
+      const { count: sCount } = await serverSupabase.from('meet_greet_settings').select('*', { count: 'exact', head: true });
+      settingsCount = sCount || 0;
+    }
+
     return res.json({
       success: true,
-      user: serverAuthSession.user,
-      session: serverAuthSession.session,
-      profile: serverAuthSession.profile,
+      environment: isProduction ? 'production' : 'development',
+      supabaseHost: projectHost,
+      supabaseConnected: isSupabaseConfigured,
+      serverSupabaseReady: Boolean(serverSupabase),
+      authenticatedUserId,
+      authenticatedEmail,
+      databaseCounts: {
+        managementUsers: managementUsersCount,
+        profiles: profilesCount,
+        settings: settingsCount
+      },
+      timestamp: new Date().toISOString()
     });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Diagnostic error';
+    return res.status(500).json({ success: false, error: msg });
   }
-  return res.json({ success: false, session: null, profile: null });
-});
-
-app.post(['/api/auth/logout', '/auth/logout'], (_req: Request, res: Response) => {
-  serverAuthSession = null;
-  return res.json({ success: true });
 });
 
 // ============================================================================
