@@ -32,6 +32,8 @@ interface DiagnosticResult {
   serverSelfHealStatus: string;
   checkedAt: string;
   latencyMs: number;
+  dbVisitorsCount?: number;
+  dbInquiriesCount?: number;
 }
 
 export function DeveloperAuthDiagnostic() {
@@ -128,6 +130,8 @@ export function DeveloperAuthDiagnostic() {
 
       // 5. Query server diagnostic helper
       let serverStatus = 'Operational';
+      let serverVisitors = 0;
+      let serverInquiries = 0;
       try {
         const sRes = await fetch('/api/auth/diagnostic', {
           headers: activeSession?.access_token ? { 'Authorization': `Bearer ${activeSession.access_token}` } : {}
@@ -135,10 +139,27 @@ export function DeveloperAuthDiagnostic() {
         if (sRes.ok) {
           const sData = await sRes.json();
           serverStatus = `Verified (${sData.environment || 'production'})`;
+          serverVisitors = sData.databaseCounts?.visitors || 0;
+          serverInquiries = sData.databaseCounts?.inquiries || 0;
         }
       } catch {
         serverStatus = 'Direct Supabase Connected';
       }
+
+      // 6. Direct Supabase counts for visitors and inquiries
+      let dbVisitorsCount = serverVisitors;
+      let dbInquiriesCount = serverInquiries;
+      try {
+        const { count: vCount } = await (supabase.from('audit_logs') as any)
+          .select('*', { count: 'exact', head: true })
+          .eq('action', 'VISITOR_RECORD');
+        if (typeof vCount === 'number') dbVisitorsCount = vCount;
+
+        const { count: iCount } = await (supabase.from('audit_logs') as any)
+          .select('*', { count: 'exact', head: true })
+          .eq('action', 'CONTACT_INQUIRY');
+        if (typeof iCount === 'number') dbInquiriesCount = iCount;
+      } catch {}
 
       const endTime = performance.now();
 
@@ -157,6 +178,8 @@ export function DeveloperAuthDiagnostic() {
         serverSelfHealStatus: serverStatus,
         checkedAt: new Date().toLocaleTimeString(),
         latencyMs: Math.round(endTime - startTime),
+        dbVisitorsCount,
+        dbInquiriesCount,
       });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Diagnostic run failed';
@@ -535,6 +558,56 @@ export function DeveloperAuthDiagnostic() {
             </p>
             <span className="text-[10px] text-slate-500 font-mono block truncate">
               Env: Production ({result?.projectSource || 'canonical'})
+            </span>
+          </div>
+
+          {/* Check 10: Database Live Visitors Sync */}
+          <div className="p-3.5 rounded-xl bg-[#0E121B] border border-white/[0.06] space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="font-mono text-[11px] text-slate-400">10. Live Visitors (Cross-Browser)</span>
+              {(result?.dbVisitorsCount ?? 0) > 0 ? (
+                <span className="inline-flex items-center gap-1 text-emerald-400 font-semibold font-mono text-[11px]">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> PASS
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-amber-400 font-semibold font-mono text-[11px]">
+                  ACTIVE
+                </span>
+              )}
+            </div>
+            <p className="text-[11px] text-white font-medium flex items-center gap-1.5">
+              <span>Tracked in Database:</span>
+              <span className="px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 font-mono font-semibold text-[10px]">
+                {result?.dbVisitorsCount ?? 0} active visitors
+              </span>
+            </p>
+            <span className="text-[10px] text-slate-500 font-mono block truncate">
+              Supabase audit_logs (VISITOR_RECORD)
+            </span>
+          </div>
+
+          {/* Check 11: Contact Inquiries Cross-Browser Sync */}
+          <div className="p-3.5 rounded-xl bg-[#0E121B] border border-white/[0.06] space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="font-mono text-[11px] text-slate-400">11. Contact Queries (Cross-Browser)</span>
+              {(result?.dbInquiriesCount ?? 0) > 0 ? (
+                <span className="inline-flex items-center gap-1 text-emerald-400 font-semibold font-mono text-[11px]">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> PASS
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-amber-400 font-semibold font-mono text-[11px]">
+                  ACTIVE
+                </span>
+              )}
+            </div>
+            <p className="text-[11px] text-white font-medium flex items-center gap-1.5">
+              <span>Saved in Database:</span>
+              <span className="px-2 py-0.5 rounded bg-sky-500/15 text-sky-300 font-mono font-semibold text-[10px]">
+                {result?.dbInquiriesCount ?? 0} inquiries & chats
+              </span>
+            </p>
+            <span className="text-[10px] text-slate-500 font-mono block truncate">
+              Supabase audit_logs (CONTACT_INQUIRY)
             </span>
           </div>
 

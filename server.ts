@@ -325,6 +325,14 @@ app.post('/api/emails/send', async (req: Request, res: Response) => {
   };
   serverEmailLogs.unshift(simRecord);
 
+  if (serverSupabase) {
+    (serverSupabase.from('audit_logs') as any).insert({
+      action: 'EMAIL_LOG',
+      metadata: simRecord,
+      created_at: nowIso,
+    }).then(null, () => {});
+  }
+
   return res.json({
     success: true,
     simulated: true,
@@ -335,10 +343,31 @@ app.post('/api/emails/send', async (req: Request, res: Response) => {
 });
 
 /**
- * Server-side email history retrieval for management
+ * Server-side email history retrieval for management (Database backed)
  */
-app.get('/api/emails/history', (_req: Request, res: Response) => {
-  res.json({ logs: serverEmailLogs });
+app.get('/api/emails/history', async (_req: Request, res: Response) => {
+  if (serverSupabase) {
+    try {
+      const { data, error } = await serverSupabase
+        .from('audit_logs')
+        .select('metadata')
+        .eq('action', 'EMAIL_LOG')
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      if (!error && data && data.length > 0) {
+        const dbLogs = data.map((r: any) => r.metadata).filter(Boolean);
+        const map = new Map<string, any>();
+        for (const item of serverEmailLogs) map.set(item.id, item);
+        for (const item of dbLogs) map.set(item.id, item);
+        const merged = Array.from(map.values()).sort(
+          (a, b) => new Date(b.created_at || b.sent_at).getTime() - new Date(a.created_at || a.sent_at).getTime()
+        );
+        return res.json({ logs: merged });
+      }
+    } catch {}
+  }
+  return res.json({ logs: serverEmailLogs });
 });
 
 /**
@@ -639,6 +668,8 @@ app.get(['/api/auth/diagnostic', '/auth/diagnostic'], async (req: Request, res: 
     let managementUsersCount = 0;
     let profilesCount = 0;
     let settingsCount = 0;
+    let visitorsCount = 0;
+    let inquiriesCount = 0;
 
     if (serverSupabase) {
       const { count: mCount } = await serverSupabase.from('management_users').select('*', { count: 'exact', head: true });
@@ -647,6 +678,10 @@ app.get(['/api/auth/diagnostic', '/auth/diagnostic'], async (req: Request, res: 
       profilesCount = pCount || 0;
       const { count: sCount } = await serverSupabase.from('meet_greet_settings').select('*', { count: 'exact', head: true });
       settingsCount = sCount || 0;
+      const { count: vCount } = await serverSupabase.from('audit_logs').select('*', { count: 'exact', head: true }).eq('action', 'VISITOR_RECORD');
+      visitorsCount = vCount || 0;
+      const { count: iCount } = await serverSupabase.from('audit_logs').select('*', { count: 'exact', head: true }).eq('action', 'CONTACT_INQUIRY');
+      inquiriesCount = iCount || 0;
     }
 
     return res.json({
@@ -660,7 +695,9 @@ app.get(['/api/auth/diagnostic', '/auth/diagnostic'], async (req: Request, res: 
       databaseCounts: {
         managementUsers: managementUsersCount,
         profiles: profilesCount,
-        settings: settingsCount
+        settings: settingsCount,
+        visitors: visitorsCount,
+        inquiries: inquiriesCount,
       },
       timestamp: new Date().toISOString()
     });
@@ -671,11 +708,146 @@ app.get(['/api/auth/diagnostic', '/auth/diagnostic'], async (req: Request, res: 
 });
 
 // ============================================================================
-// VISITOR & IP TRACKING SERVER ENDPOINTS
+// VISITOR & IP TRACKING SERVER ENDPOINTS (SUPABASE PERSISTED)
 // ============================================================================
 
 const serverVisitorStore = new Map<string, any>();
 const serverInquiryStore = new Map<string, any>();
+
+async function persistVisitorToDatabase(record: any): Promise<void> {
+  if (!serverSupabase || !record?.visitorId) return;
+  try {
+    const { data: existingRows } = await serverSupabase
+      .from('audit_logs')
+      .select('id')
+      .eq('action', 'VISITOR_RECORD')
+      .filter('metadata->>visitorId', 'eq', record.visitorId)
+      .limit(1);
+
+    if (existingRows && existingRows.length > 0) {
+      await serverSupabase
+        .from('audit_logs')
+        .update({
+          metadata: record,
+          created_at: record.lastSeenAt || new Date().toISOString(),
+        })
+        .eq('id', existingRows[0].id);
+    } else {
+      await serverSupabase
+        .from('audit_logs')
+        .insert({
+          action: 'VISITOR_RECORD',
+          metadata: record,
+          created_at: record.lastSeenAt || new Date().toISOString(),
+        });
+    }
+  } catch (err) {
+    console.warn('Notice: Background database visitor sync:', err);
+  }
+}
+
+async function fetchVisitorsFromDatabase(): Promise<any[]> {
+  if (!serverSupabase) {
+    return Array.from(serverVisitorStore.values()).sort(
+      (a, b) => new Date(b.lastSeenAt).getTime() - new Date(a.lastSeenAt).getTime()
+    );
+  }
+  try {
+    const { data, error } = await serverSupabase
+      .from('audit_logs')
+      .select('metadata')
+      .eq('action', 'VISITOR_RECORD')
+      .order('created_at', { ascending: false })
+      .limit(150);
+
+    if (!error && data && data.length > 0) {
+      const records = data.map((r: any) => r.metadata).filter(Boolean);
+      // Sync into memory store
+      for (const r of records) {
+        if (r.visitorId) {
+          const current = serverVisitorStore.get(r.visitorId);
+          if (!current || new Date(r.lastSeenAt) >= new Date(current.lastSeenAt)) {
+            serverVisitorStore.set(r.visitorId, r);
+          }
+        }
+      }
+      return records;
+    }
+  } catch (err) {
+    console.warn('Notice: Error fetching visitors from database:', err);
+  }
+  return Array.from(serverVisitorStore.values()).sort(
+    (a, b) => new Date(b.lastSeenAt).getTime() - new Date(a.lastSeenAt).getTime()
+  );
+}
+
+async function persistInquiryToDatabase(inquiry: any): Promise<void> {
+  if (!serverSupabase || !inquiry?.id) return;
+  try {
+    const { data: existingRows } = await serverSupabase
+      .from('audit_logs')
+      .select('id')
+      .eq('action', 'CONTACT_INQUIRY')
+      .filter('metadata->>id', 'eq', inquiry.id)
+      .limit(1);
+
+    if (existingRows && existingRows.length > 0) {
+      await serverSupabase
+        .from('audit_logs')
+        .update({
+          metadata: inquiry,
+          created_at: inquiry.updatedAt || new Date().toISOString(),
+        })
+        .eq('id', existingRows[0].id);
+    } else {
+      await serverSupabase
+        .from('audit_logs')
+        .insert({
+          action: 'CONTACT_INQUIRY',
+          metadata: inquiry,
+          created_at: inquiry.createdAt || new Date().toISOString(),
+        });
+    }
+  } catch (err) {
+    console.warn('Notice: Background database inquiry sync:', err);
+  }
+}
+
+async function fetchInquiriesFromDatabase(visitorId?: string): Promise<any[]> {
+  if (!serverSupabase) {
+    const all = Array.from(serverInquiryStore.values());
+    const filtered = visitorId ? all.filter((i: any) => i.visitorId === visitorId) : all;
+    return filtered.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+  }
+  try {
+    let query = serverSupabase
+      .from('audit_logs')
+      .select('metadata')
+      .eq('action', 'CONTACT_INQUIRY')
+      .order('created_at', { ascending: false })
+      .limit(150);
+
+    if (visitorId) {
+      query = query.filter('metadata->>visitorId', 'eq', visitorId);
+    }
+
+    const { data, error } = await query;
+    if (!error && data && data.length > 0) {
+      const records = data.map((r: any) => r.metadata).filter(Boolean);
+      for (const inq of records) {
+        if (inq.id) {
+          serverInquiryStore.set(inq.id, inq);
+        }
+      }
+      return records;
+    }
+  } catch (err) {
+    console.warn('Notice: Error fetching inquiries from database:', err);
+  }
+  const all = Array.from(serverInquiryStore.values());
+  const filtered = visitorId ? all.filter((i: any) => i.visitorId === visitorId) : all;
+  return filtered.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+}
 
 /**
  * IP lookup helper from server headers
@@ -697,7 +869,7 @@ app.get('/api/visitors/ip-lookup', (req: Request, res: Response) => {
 /**
  * Track visitor arrival and heartbeat
  */
-app.post('/api/visitors/track', (req: Request, res: Response) => {
+app.post('/api/visitors/track', async (req: Request, res: Response) => {
   try {
     const record = req.body;
     if (!record || !record.visitorId) {
@@ -717,6 +889,8 @@ app.post('/api/visitors/track', (req: Request, res: Response) => {
     };
 
     serverVisitorStore.set(record.visitorId, updated);
+    // Asynchronously persist to Supabase PostgreSQL database
+    persistVisitorToDatabase(updated).catch(() => {});
     return res.json({ success: true, visitor: updated });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Visitor tracking error';
@@ -727,18 +901,26 @@ app.post('/api/visitors/track', (req: Request, res: Response) => {
 /**
  * Visitor heartbeat
  */
-app.post('/api/visitors/heartbeat', (req: Request, res: Response) => {
+app.post('/api/visitors/heartbeat', async (req: Request, res: Response) => {
   try {
     const { visitorId, currentPath, timestamp } = req.body;
     if (!visitorId) return res.status(400).json({ success: false });
 
-    const existing = serverVisitorStore.get(visitorId);
-    if (existing) {
-      existing.isOnline = true;
-      existing.lastSeenAt = timestamp || new Date().toISOString();
-      if (currentPath) existing.currentPage = currentPath;
-      serverVisitorStore.set(visitorId, existing);
+    let target = serverVisitorStore.get(visitorId);
+    if (!target) {
+      target = {
+        visitorId,
+        currentPage: currentPath || '/',
+        lastSeenAt: timestamp || new Date().toISOString(),
+        isOnline: true,
+      };
+    } else {
+      target.isOnline = true;
+      target.lastSeenAt = timestamp || new Date().toISOString();
+      if (currentPath) target.currentPage = currentPath;
     }
+    serverVisitorStore.set(visitorId, target);
+    persistVisitorToDatabase(target).catch(() => {});
     return res.json({ success: true });
   } catch {
     return res.status(500).json({ success: false });
@@ -746,29 +928,33 @@ app.post('/api/visitors/heartbeat', (req: Request, res: Response) => {
 });
 
 /**
- * Retrieve all tracked visitors for management
+ * Retrieve all tracked visitors for management (Database backed across browsers)
  */
-app.get('/api/visitors', (_req: Request, res: Response) => {
-  const visitors = Array.from(serverVisitorStore.values()).sort(
-    (a, b) => new Date(b.lastSeenAt).getTime() - new Date(a.lastSeenAt).getTime()
-  );
-  return res.json({ success: true, visitors, count: visitors.length });
+app.get('/api/visitors', async (_req: Request, res: Response) => {
+  try {
+    const visitors = await fetchVisitorsFromDatabase();
+    return res.json({ success: true, visitors, count: visitors.length });
+  } catch {
+    const visitors = Array.from(serverVisitorStore.values());
+    return res.json({ success: true, visitors, count: visitors.length });
+  }
 });
 
 // ============================================================================
-// IN-APP FLOATING CONTACT & INQUIRIES ENDPOINTS
+// IN-APP FLOATING CONTACT & INQUIRIES ENDPOINTS (SUPABASE PERSISTED)
 // ============================================================================
 
 /**
  * Submit inquiry from floating contact box
  */
-app.post('/api/inquiries/submit', (req: Request, res: Response) => {
+app.post('/api/inquiries/submit', async (req: Request, res: Response) => {
   try {
     const inquiry = req.body;
     if (!inquiry || !inquiry.id) {
       return res.status(400).json({ success: false, error: 'Invalid inquiry data' });
     }
     serverInquiryStore.set(inquiry.id, inquiry);
+    await persistInquiryToDatabase(inquiry);
     return res.json({ success: true, inquiry });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Inquiry submission error';
@@ -777,32 +963,53 @@ app.post('/api/inquiries/submit', (req: Request, res: Response) => {
 });
 
 /**
- * Retrieve all inquiries for management
+ * Retrieve all inquiries for management (Database backed across browsers)
  */
-app.get('/api/inquiries', (_req: Request, res: Response) => {
-  const inquiries = Array.from(serverInquiryStore.values()).sort(
-    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-  );
-  return res.json({ success: true, inquiries, count: inquiries.length });
+app.get('/api/inquiries', async (_req: Request, res: Response) => {
+  try {
+    const inquiries = await fetchInquiriesFromDatabase();
+    return res.json({ success: true, inquiries, count: inquiries.length });
+  } catch {
+    const inquiries = Array.from(serverInquiryStore.values());
+    return res.json({ success: true, inquiries, count: inquiries.length });
+  }
 });
 
 /**
  * Retrieve inquiries for a specific visitor
  */
-app.get('/api/inquiries/visitor/:visitorId', (req: Request, res: Response) => {
-  const { visitorId } = req.params;
-  const list = Array.from(serverInquiryStore.values())
-    .filter(i => i.visitorId === visitorId)
-    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-  return res.json({ success: true, inquiries: list });
+app.get('/api/inquiries/visitor/:visitorId', async (req: Request, res: Response) => {
+  try {
+    const { visitorId } = req.params;
+    const inquiries = await fetchInquiriesFromDatabase(visitorId);
+    return res.json({ success: true, inquiries });
+  } catch {
+    const { visitorId } = req.params;
+    const list = Array.from(serverInquiryStore.values()).filter((i: any) => i.visitorId === visitorId);
+    return res.json({ success: true, inquiries: list });
+  }
 });
 
 /**
  * Retrieve single inquiry by ID
  */
-app.get('/api/inquiries/:id', (req: Request, res: Response) => {
+app.get('/api/inquiries/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const target = serverInquiryStore.get(id);
+  let target = serverInquiryStore.get(id);
+  if (!target && serverSupabase) {
+    try {
+      const { data } = await serverSupabase
+        .from('audit_logs')
+        .select('metadata')
+        .eq('action', 'CONTACT_INQUIRY')
+        .filter('metadata->>id', 'eq', id)
+        .limit(1);
+      if (data && data[0]?.metadata) {
+        target = data[0].metadata;
+        serverInquiryStore.set(id, target);
+      }
+    } catch {}
+  }
   if (target) {
     return res.json({ success: true, inquiry: target });
   }
@@ -812,15 +1019,27 @@ app.get('/api/inquiries/:id', (req: Request, res: Response) => {
 /**
  * Append message to inquiry thread (visitor or management)
  */
-app.post('/api/inquiries/:id/message', (req: Request, res: Response) => {
+app.post('/api/inquiries/:id/message', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { message, status } = req.body;
-    const target = serverInquiryStore.get(id);
+    let target = serverInquiryStore.get(id);
+    if (!target && serverSupabase) {
+      const { data } = await serverSupabase
+        .from('audit_logs')
+        .select('metadata')
+        .eq('action', 'CONTACT_INQUIRY')
+        .filter('metadata->>id', 'eq', id)
+        .limit(1);
+      if (data && data[0]?.metadata) {
+        target = data[0].metadata;
+      }
+    }
     if (!target) {
       return res.status(404).json({ success: false, error: 'Inquiry not found' });
     }
     if (message) {
+      if (!Array.isArray(target.messages)) target.messages = [];
       target.messages.push(message);
     }
     if (status) {
@@ -828,6 +1047,7 @@ app.post('/api/inquiries/:id/message', (req: Request, res: Response) => {
     }
     target.updatedAt = new Date().toISOString();
     serverInquiryStore.set(id, target);
+    await persistInquiryToDatabase(target);
     return res.json({ success: true, inquiry: target });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Message post error';
@@ -838,16 +1058,61 @@ app.post('/api/inquiries/:id/message', (req: Request, res: Response) => {
 /**
  * Management reply to inquiry
  */
-app.post('/api/inquiries/:id/reply', (req: Request, res: Response) => {
+app.post('/api/inquiries/:id/reply', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { message, status } = req.body;
-    const target = serverInquiryStore.get(id);
+    let target = serverInquiryStore.get(id);
+    if (!target && serverSupabase) {
+      const { data } = await serverSupabase
+        .from('audit_logs')
+        .select('metadata')
+        .eq('action', 'CONTACT_INQUIRY')
+        .filter('metadata->>id', 'eq', id)
+        .limit(1);
+      if (data && data[0]?.metadata) {
+        target = data[0].metadata;
+      }
+    }
     if (target) {
+      if (!Array.isArray(target.messages)) target.messages = [];
       if (message) target.messages.push(message);
       if (status) target.status = status;
       target.updatedAt = new Date().toISOString();
       serverInquiryStore.set(id, target);
+      await persistInquiryToDatabase(target);
+      return res.json({ success: true, inquiry: target });
+    }
+    return res.status(404).json({ success: false, error: 'Inquiry not found' });
+  } catch {
+    return res.status(500).json({ success: false });
+  }
+});
+
+/**
+ * Management update status of inquiry
+ */
+app.post(['/api/inquiries/:id/status', '/api/inquiries/:id/update-status'], async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+    let target = serverInquiryStore.get(id);
+    if (!target && serverSupabase) {
+      const { data } = await serverSupabase
+        .from('audit_logs')
+        .select('metadata')
+        .eq('action', 'CONTACT_INQUIRY')
+        .filter('metadata->>id', 'eq', id)
+        .limit(1);
+      if (data && data[0]?.metadata) {
+        target = data[0].metadata;
+      }
+    }
+    if (target) {
+      if (status) target.status = status;
+      target.updatedAt = new Date().toISOString();
+      serverInquiryStore.set(id, target);
+      await persistInquiryToDatabase(target);
       return res.json({ success: true, inquiry: target });
     }
     return res.status(404).json({ success: false, error: 'Inquiry not found' });

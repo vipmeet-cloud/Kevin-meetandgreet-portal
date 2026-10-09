@@ -28,6 +28,9 @@ export const auditService = {
 
         if (options?.action && options.action !== 'ALL') {
           query = query.eq('action', options.action);
+        } else {
+          // Exclude internal system sync records from management audit trail
+          query = query.not('action', 'in', '("VISITOR_RECORD","CONTACT_INQUIRY","EMAIL_LOG")');
         }
         if (options?.applicationId) {
           query = query.eq('application_id', options.applicationId);

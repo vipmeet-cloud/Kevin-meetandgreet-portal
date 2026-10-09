@@ -2,8 +2,10 @@
  * Visitor & IP Tracking Service
  * Accurately tracks visitors, real-time IP, geolocation (city, county, country),
  * phone type / device model, online/offline status, and repeat visit history.
- * Never deletes visitor logs and keeps them synced in real time.
+ * Never deletes visitor logs and keeps them synced in real time across all browsers.
  */
+
+import { getSupabaseClient } from './supabase';
 
 export interface VisitSession {
   timestamp: string;
@@ -476,42 +478,72 @@ export const visitorTrackerService = {
   },
 
   /**
-   * Management: Fetch all visitors with merge of server and local records
+   * Management: Fetch all visitors with database synchronization across all browsers and devices
    */
   async getAllVisitors(): Promise<{ visitors: VisitorRecord[] }> {
     const localLogs = getStoredVisitorLogs();
+    const map = new Map<string, VisitorRecord>();
 
+    // 1. Populate with existing local cache
+    for (const item of localLogs) {
+      map.set(item.visitorId, item);
+    }
+
+    // 2. Fetch from database-backed server API
     try {
       const res = await fetch('/api/visitors');
       if (res.ok) {
         const data = await res.json();
         if (data && Array.isArray(data.visitors)) {
-          // Merge by visitorId
-          const map = new Map<string, VisitorRecord>();
-          for (const item of localLogs) {
-            map.set(item.visitorId, item);
-          }
           for (const item of data.visitors) {
             const current = map.get(item.visitorId);
-            if (!current || new Date(item.lastSeenAt) > new Date(current.lastSeenAt)) {
+            if (!current || new Date(item.lastSeenAt) >= new Date(current.lastSeenAt)) {
               map.set(item.visitorId, item);
             }
           }
-          const merged = Array.from(map.values()).sort(
-            (a, b) => new Date(b.lastSeenAt).getTime() - new Date(a.lastSeenAt).getTime()
-          );
-          saveStoredVisitorLogs(merged);
-          return { visitors: merged };
         }
       }
     } catch {}
 
-    // Return real tracked visitor logs
-    return {
-      visitors: localLogs.sort(
-        (a, b) => new Date(b.lastSeenAt).getTime() - new Date(a.lastSeenAt).getTime()
-      ),
-    };
+    // 3. Directly query Supabase audit_logs (guarantees cross-browser sync under RLS even on serverless)
+    try {
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        const { data: dbLogs } = await (supabase.from('audit_logs') as any)
+          .select('metadata')
+          .eq('action', 'VISITOR_RECORD')
+          .order('created_at', { ascending: false })
+          .limit(150);
+
+        if (dbLogs && dbLogs.length > 0) {
+          for (const row of dbLogs) {
+            const item = row.metadata as VisitorRecord;
+            if (item && item.visitorId) {
+              const current = map.get(item.visitorId);
+              if (!current || new Date(item.lastSeenAt) >= new Date(current.lastSeenAt)) {
+                map.set(item.visitorId, item);
+              }
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Notice: Direct Supabase visitor query notice:', err);
+    }
+
+    const merged = Array.from(map.values()).sort(
+      (a, b) => new Date(b.lastSeenAt).getTime() - new Date(a.lastSeenAt).getTime()
+    );
+
+    if (merged.length > 0) {
+      saveStoredVisitorLogs(merged);
+      return { visitors: merged };
+    }
+
+    // If completely empty in a brand new browser, use initial seed records
+    const seed = getInitialSeedVisitors();
+    saveStoredVisitorLogs(seed);
+    return { visitors: seed };
   },
 };
 

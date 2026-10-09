@@ -1,8 +1,10 @@
 /**
  * In-App Floating Contact & Management Inquiry Service
  * Supports instant visitor inquiries from floating contact box,
- * management replies, and two-way in-app synchronization.
+ * management replies, and two-way in-app database synchronization across all browsers.
  */
+
+import { getSupabaseClient } from './supabase';
 
 export interface ContactMessage {
   id: string;
@@ -119,28 +121,54 @@ export const inquiryService = {
    * Fetches latest replies from server so management responses appear in real-time
    */
   async getInquiriesForVisitor(visitorId: string): Promise<InquiryRecord[]> {
+    const local = getStoredInquiries();
+    const map = new Map<string, InquiryRecord>();
+    for (const item of local) {
+      if (item.visitorId === visitorId) map.set(item.id, item);
+    }
+
     try {
       const res = await fetch(`/api/inquiries/visitor/${encodeURIComponent(visitorId)}`);
       if (res.ok) {
         const data = await res.json();
-        if (data.success && Array.isArray(data.inquiries) && data.inquiries.length > 0) {
-          const local = getStoredInquiries();
-          const map = new Map<string, InquiryRecord>();
-          for (const item of local) map.set(item.id, item);
+        if (data.success && Array.isArray(data.inquiries)) {
           for (const item of data.inquiries) map.set(item.id, item);
-          const merged = Array.from(map.values());
-          saveStoredInquiries(merged);
-          return (data.inquiries as InquiryRecord[]).sort(
-            (a: InquiryRecord, b: InquiryRecord) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-          );
         }
       }
     } catch {}
 
-    const inquiries = getStoredInquiries();
-    return inquiries
-      .filter(i => i.visitorId === visitorId)
-      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+    // Also check direct Supabase connection under RLS if available
+    try {
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        const { data: dbData } = await (supabase.from('audit_logs') as any)
+          .select('metadata')
+          .eq('action', 'CONTACT_INQUIRY')
+          .filter('metadata->>visitorId', 'eq', visitorId)
+          .order('created_at', { ascending: false });
+
+        if (dbData && dbData.length > 0) {
+          for (const row of dbData) {
+            const item = row.metadata as InquiryRecord;
+            if (item && item.id) map.set(item.id, item);
+          }
+        }
+      }
+    } catch {}
+
+    const merged = Array.from(map.values()).sort(
+      (a: InquiryRecord, b: InquiryRecord) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+    );
+
+    if (merged.length > 0) {
+      const fullList = getStoredInquiries();
+      const fullMap = new Map<string, InquiryRecord>();
+      for (const item of fullList) fullMap.set(item.id, item);
+      for (const item of merged) fullMap.set(item.id, item);
+      saveStoredInquiries(Array.from(fullMap.values()));
+    }
+
+    return merged;
   },
 
   /**
@@ -155,7 +183,7 @@ export const inquiryService = {
   ): Promise<{ success: boolean; inquiry?: InquiryRecord }> {
     const nowIso = new Date().toISOString();
     const inquiries = getStoredInquiries();
-    const target = inquiries.find(i => i.id === inquiryId);
+    let target = inquiries.find(i => i.id === inquiryId);
 
     const newMsg: ContactMessage = {
       id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
@@ -167,6 +195,7 @@ export const inquiryService = {
     };
 
     if (target) {
+      if (!Array.isArray(target.messages)) target.messages = [];
       target.messages.push(newMsg);
       target.updatedAt = nowIso;
       if (sender === 'management') {
@@ -177,6 +206,7 @@ export const inquiryService = {
       saveStoredInquiries(inquiries);
     }
 
+    // 1. Dispatch to server backend
     try {
       const endpoint = sender === 'management' ? `/api/inquiries/${inquiryId}/reply` : `/api/inquiries/${inquiryId}/message`;
       const res = await fetch(endpoint, {
@@ -187,42 +217,109 @@ export const inquiryService = {
       if (res.ok) {
         const data = await res.json();
         if (data.inquiry) {
-          return { success: true, inquiry: data.inquiry };
+          target = data.inquiry;
         }
       }
     } catch {}
+
+    // 2. Direct Supabase write when management is authenticated
+    if (sender === 'management') {
+      try {
+        const supabase = getSupabaseClient();
+        if (supabase && target) {
+          const { data: existingRows } = await (supabase.from('audit_logs') as any)
+            .select('id')
+            .eq('action', 'CONTACT_INQUIRY')
+            .filter('metadata->>id', 'eq', inquiryId)
+            .limit(1);
+
+          if (existingRows && existingRows.length > 0) {
+            await (supabase.from('audit_logs') as any)
+              .update({
+                metadata: target,
+                created_at: target.updatedAt,
+              })
+              .eq('id', existingRows[0].id);
+          } else {
+            await (supabase.from('audit_logs') as any)
+              .insert({
+                action: 'CONTACT_INQUIRY',
+                metadata: target,
+                created_at: target.updatedAt,
+              });
+          }
+        }
+      } catch (err) {
+        console.warn('Notice: Direct Supabase inquiry reply sync:', err);
+      }
+    }
 
     return { success: Boolean(target), inquiry: target };
   },
 
   /**
-   * Management: Fetch all inquiries
+   * Management: Fetch all inquiries (Database backed across browsers)
    */
   async getAllInquiries(): Promise<{ inquiries: InquiryRecord[] }> {
     const local = getStoredInquiries();
+    const map = new Map<string, InquiryRecord>();
 
+    // 1. Local cache
+    for (const item of local) {
+      map.set(item.id, item);
+    }
+
+    // 2. Server API backed by database
     try {
       const res = await fetch('/api/inquiries');
       if (res.ok) {
         const data = await res.json();
         if (data && Array.isArray(data.inquiries)) {
-          const map = new Map<string, InquiryRecord>();
-          for (const item of local) map.set(item.id, item);
-          for (const item of data.inquiries) map.set(item.id, item);
-          const merged = Array.from(map.values()).sort(
-            (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-          );
-          saveStoredInquiries(merged);
-          return { inquiries: merged };
+          for (const item of data.inquiries) {
+            const current = map.get(item.id);
+            if (!current || new Date(item.updatedAt) >= new Date(current.updatedAt)) {
+              map.set(item.id, item);
+            }
+          }
         }
       }
     } catch {}
 
-    return {
-      inquiries: local.sort(
-        (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-      ),
-    };
+    // 3. Direct Supabase query under management RLS
+    try {
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        const { data: dbData } = await (supabase.from('audit_logs') as any)
+          .select('metadata')
+          .eq('action', 'CONTACT_INQUIRY')
+          .order('created_at', { ascending: false })
+          .limit(150);
+
+        if (dbData && dbData.length > 0) {
+          for (const row of dbData) {
+            const item = row.metadata as InquiryRecord;
+            if (item && item.id) {
+              const current = map.get(item.id);
+              if (!current || new Date(item.updatedAt) >= new Date(current.updatedAt)) {
+                map.set(item.id, item);
+              }
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Notice: Direct Supabase inquiry query notice:', err);
+    }
+
+    const merged = Array.from(map.values()).sort(
+      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+    );
+
+    if (merged.length > 0) {
+      saveStoredInquiries(merged);
+    }
+
+    return { inquiries: merged };
   },
 
   /**
@@ -236,5 +333,35 @@ export const inquiryService = {
       target.updatedAt = new Date().toISOString();
       saveStoredInquiries(inquiries);
     }
+
+    // Server API
+    try {
+      fetch(`/api/inquiries/${encodeURIComponent(inquiryId)}/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      }).catch(() => {});
+    } catch {}
+
+    // Direct Supabase update
+    try {
+      const supabase = getSupabaseClient();
+      if (supabase && target) {
+        const { data: rows } = await (supabase.from('audit_logs') as any)
+          .select('id')
+          .eq('action', 'CONTACT_INQUIRY')
+          .filter('metadata->>id', 'eq', inquiryId)
+          .limit(1);
+
+        if (rows && rows.length > 0) {
+          await (supabase.from('audit_logs') as any)
+            .update({
+              metadata: target,
+              created_at: target.updatedAt,
+            })
+            .eq('id', rows[0].id);
+        }
+      }
+    } catch {}
   },
 };

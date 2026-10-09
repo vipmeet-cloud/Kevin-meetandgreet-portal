@@ -116,6 +116,23 @@ export const emailService = {
       }
     } catch {}
 
+    // Query Supabase database under management RLS
+    try {
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        const { data: dbLogs } = await (supabase.from('audit_logs') as any)
+          .select('metadata')
+          .eq('action', 'EMAIL_LOG')
+          .order('created_at', { ascending: false })
+          .limit(100);
+
+        if (dbLogs && dbLogs.length > 0) {
+          const parsed = dbLogs.map((r: any) => r.metadata as EmailLogRecord).filter(Boolean);
+          remoteLogs = [...remoteLogs, ...parsed];
+        }
+      }
+    } catch {}
+
     const devLogs = getStoredDevEmailLogs();
 
     // Deduplicate by id
