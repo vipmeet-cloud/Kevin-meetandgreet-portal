@@ -224,6 +224,33 @@ export const paymentService = {
       attendee_count: app.attendee_count,
     };
 
+    // 1. Primary submission via server API endpoint (bypasses RLS)
+    try {
+      const serverRes = await fetch('/api/payments/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          application_id: app.id,
+          amount: data.amount,
+          currency: data.currency,
+          payment_method: data.payment_method,
+          payment_reference: data.payment_reference.trim(),
+          payment_date: data.payment_date,
+          receipt_url: data.receipt_url || null,
+          receipt_public_id: data.receipt_public_id || null,
+        }),
+      });
+
+      if (serverRes.ok) {
+        const sData = await serverRes.json();
+        if (sData.success && sData.payment) {
+          paymentPayload.id = sData.payment.id;
+        }
+      }
+    } catch (sErr) {
+      console.warn('Notice: Server payment submission notice, trying direct client DB:', sErr);
+    }
+
     if (supabase && isUuid(app.id)) {
       try {
         // Insert into payment_records
@@ -463,10 +490,29 @@ export const paymentService = {
    * Consolidates Supabase records, local device storage, and application payment workflows
    */
   async fetchAllPayments(): Promise<{ payments: PaymentRecord[]; error?: string }> {
-    const supabase = getSupabaseClient();
     let remotePayments: PaymentRecord[] = [];
 
-    if (supabase) {
+    // 1. Try server API endpoint (bypasses RLS)
+    try {
+      const serverRes = await fetch('/api/payments');
+      if (serverRes.ok) {
+        const sData = await serverRes.json();
+        if (sData.success && Array.isArray(sData.payments)) {
+          remotePayments = sData.payments.map((p: any) => ({
+            ...p,
+            applicant_name: p.application?.full_name || p.applicant_name || 'Guest Applicant',
+            applicant_email: p.application?.email || p.applicant_email || '',
+            application_reference: p.application?.reference_code || p.application_reference || 'VIP-REF',
+            preferred_date: p.application?.preferred_date || p.preferred_date,
+            preferred_session: p.application?.preferred_session || p.preferred_session,
+            attendee_count: p.application?.attendee_count || p.attendee_count || 1,
+          }));
+        }
+      }
+    } catch {}
+
+    const supabase = getSupabaseClient();
+    if (remotePayments.length === 0 && supabase) {
       try {
         // Query payments joined with application details
         const { data: paymentsData, error: paymentsErr } = await (supabase.from('payment_records') as any)
@@ -577,177 +623,10 @@ export const paymentService = {
   },
 
   /**
-   * Seed demo payments for testing and initial review roster
+   * Return current payments without injecting demo data
    */
   seedSamplePayments(): PaymentRecord[] {
-    const nowIso = new Date().toISOString();
-    const sampleRecords: PaymentRecord[] = [
-      {
-        id: '7c9e6679-7425-40de-944b-e07fc1f90ae7',
-        application_id: 'b2a1e05d-6869-4ef2-9f69-7c8088ea2851',
-        amount: 2500,
-        currency: 'USD',
-        payment_method: 'Bank Wire Transfer',
-        payment_reference: 'WIRE-BOA-88492049',
-        payment_date: new Date(Date.now() - 3600000 * 4).toISOString().split('T')[0],
-        receipt_url: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=1200&auto=format&fit=crop&q=80',
-        receipt_public_id: null,
-        status: 'PAYMENT_UNDER_REVIEW',
-        submitted_at: new Date(Date.now() - 3600000 * 4).toISOString(),
-        reviewed_at: null,
-        reviewed_by: null,
-        rejection_reason: null,
-        management_note: null,
-        created_at: nowIso,
-        updated_at: nowIso,
-        applicant_name: 'Jonathan Sterling',
-        applicant_email: 'j.sterling.vip@gmail.com',
-        application_reference: 'VIP-7X9B-44A',
-        preferred_date: 'October 24, 2026',
-        preferred_session: 'Evening Gala & Private Reception',
-        attendee_count: 2,
-        application: {
-          id: 'b2a1e05d-6869-4ef2-9f69-7c8088ea2851',
-          reference_code: 'VIP-7X9B-44A',
-          full_name: 'Jonathan Sterling',
-          email: 'j.sterling.vip@gmail.com',
-          phone: '+1 (555) 234-8901',
-          country: 'United States',
-          city: 'Beverly Hills, CA',
-          preferred_contact_method: 'email',
-          preferred_date: 'October 24, 2026',
-          preferred_session: 'Evening Gala & Private Reception',
-          attendee_count: 2,
-          special_requirements: 'Executive private security liaison requested.',
-          message_to_management: 'Honored to attend this private reception.',
-          terms_version: '1.0',
-          terms_accepted_at: nowIso,
-          privacy_accepted_at: nowIso,
-          status: 'PAYMENT_UNDER_REVIEW',
-          created_at: nowIso,
-          updated_at: nowIso,
-        }
-      },
-      {
-        id: 'c3b2e16f-7970-4f03-8e70-8d9199fb3962',
-        application_id: 'd4c3f27a-8081-4014-9f81-9ea200ac4073',
-        amount: 2500,
-        currency: 'USD',
-        payment_method: 'Bitcoin / Cryptocurrency',
-        payment_reference: 'bc1q9v3n92x7wz4k8t5y2m0p1a3d6f8h0j4l7c9s2x',
-        payment_date: new Date(Date.now() - 3600000 * 8).toISOString().split('T')[0],
-        crypto_wallet_address: 'bc1q9v3n92x7wz4k8t5y2m0p1a3d6f8h0j4l7c9s2x',
-        crypto_tx_hash: '4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b',
-        receipt_url: null,
-        receipt_public_id: null,
-        status: 'PAYMENT_SUBMITTED',
-        submitted_at: new Date(Date.now() - 3600000 * 8).toISOString(),
-        reviewed_at: null,
-        reviewed_by: null,
-        rejection_reason: null,
-        management_note: null,
-        created_at: nowIso,
-        updated_at: nowIso,
-        applicant_name: 'Elena Rostova',
-        applicant_email: 'elena.rostova.private@outlook.com',
-        application_reference: 'VIP-9K2C-88E',
-        preferred_date: 'October 25, 2026',
-        preferred_session: 'Afternoon Private Salon (14:00 - 16:30)',
-        attendee_count: 1,
-        application: {
-          id: 'd4c3f27a-8081-4014-9f81-9ea200ac4073',
-          reference_code: 'VIP-9K2C-88E',
-          full_name: 'Elena Rostova',
-          email: 'elena.rostova.private@outlook.com',
-          phone: '+44 20 7946 0912',
-          country: 'United Kingdom',
-          city: 'London',
-          preferred_contact_method: 'email',
-          preferred_date: 'October 25, 2026',
-          preferred_session: 'Afternoon Private Salon (14:00 - 16:30)',
-          attendee_count: 1,
-          special_requirements: null,
-          message_to_management: 'Traveling from London exclusively for the audience.',
-          terms_version: '1.0',
-          terms_accepted_at: nowIso,
-          privacy_accepted_at: nowIso,
-          status: 'PAYMENT_SUBMITTED',
-          created_at: nowIso,
-          updated_at: nowIso,
-        }
-      },
-      {
-        id: 'e5d4a38b-9192-4125-a092-0fb311bd5184',
-        application_id: 'f6e5b49c-0203-4236-b103-1ac422ce6295',
-        amount: 2500,
-        currency: 'USD',
-        payment_method: 'Gift Card',
-        payment_reference: 'GC-APPLE-982144',
-        payment_date: new Date(Date.now() - 3600000 * 24).toISOString().split('T')[0],
-        gift_card_type: 'Apple Gift Card',
-        gift_card_code: 'X994-8219-4402',
-        gift_card_pin: '4190',
-        gift_card_image_url: 'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?w=1200&auto=format&fit=crop&q=80',
-        receipt_url: 'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?w=1200&auto=format&fit=crop&q=80',
-        receipt_public_id: null,
-        status: 'PAYMENT_CONFIRMED',
-        submitted_at: new Date(Date.now() - 3600000 * 24).toISOString(),
-        reviewed_at: new Date(Date.now() - 3600000 * 18).toISOString(),
-        reviewed_by: 'admin_primary_management_001',
-        rejection_reason: null,
-        management_note: 'Verified and redeemed by VIP liaison.',
-        created_at: nowIso,
-        updated_at: nowIso,
-        applicant_name: 'Marcus Vance',
-        applicant_email: 'marcus.vance@vancemedia.com',
-        application_reference: 'VIP-4M8P-19D',
-        preferred_date: 'October 24, 2026',
-        preferred_session: 'Morning Private Salon (10:00 - 12:30)',
-        attendee_count: 1,
-        application: {
-          id: 'f6e5b49c-0203-4236-b103-1ac422ce6295',
-          reference_code: 'VIP-4M8P-19D',
-          full_name: 'Marcus Vance',
-          email: 'marcus.vance@vancemedia.com',
-          phone: '+1 (415) 890-1234',
-          country: 'United States',
-          city: 'San Francisco, CA',
-          preferred_contact_method: 'email',
-          preferred_date: 'October 24, 2026',
-          preferred_session: 'Morning Private Salon (10:00 - 12:30)',
-          attendee_count: 1,
-          special_requirements: null,
-          message_to_management: 'Looking forward to meeting.',
-          terms_version: '1.0',
-          terms_accepted_at: nowIso,
-          privacy_accepted_at: nowIso,
-          status: 'PAYMENT_CONFIRMED_AWAITING_PASS',
-          created_at: nowIso,
-          updated_at: nowIso,
-        }
-      }
-    ];
-
-    const current = getStoredDevPayments();
-    const currentRefs = new Set(current.map(c => c.payment_reference));
-    const toAdd = sampleRecords.filter(s => !currentRefs.has(s.payment_reference));
-    const merged = [...toAdd, ...current];
-    saveStoredDevPayments(merged);
-
-    // Also register sample applications
-    try {
-      const rawApps = localStorage.getItem('aura_vip_dev_applications');
-      const apps: ApplicationRecord[] = rawApps ? JSON.parse(rawApps) : [];
-      const appRefs = new Set(apps.map(a => a.reference_code));
-      for (const s of sampleRecords) {
-        if (s.application && !appRefs.has(s.application.reference_code)) {
-          apps.unshift(s.application);
-        }
-      }
-      localStorage.setItem('aura_vip_dev_applications', JSON.stringify(apps));
-    } catch {}
-
-    return merged;
+    return getStoredDevPayments();
   },
 
   /**

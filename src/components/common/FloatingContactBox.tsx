@@ -189,171 +189,171 @@ export function FloatingContactBox() {
   return (
     <>
       {/* Floating Trigger Button (Bottom Right) */}
-      <div className="fixed bottom-5 right-5 z-40">
+      <div className="fixed bottom-4 right-4 z-40">
         {!isOpen && (
           <button
             type="button"
             onClick={() => setIsOpen(true)}
-            className="group px-4 sm:px-5 py-3 rounded-full bg-[#0E1118]/95 hover:bg-[#121622] text-white border border-amber-500/40 shadow-2xl backdrop-blur-xl flex items-center gap-3 transition-all hover:scale-105 active:scale-95 cursor-pointer ring-4 ring-amber-500/10"
+            className="group px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-full bg-[#0E1118]/95 hover:bg-[#121622] text-white border border-amber-500/40 shadow-xl backdrop-blur-md flex items-center gap-2.5 transition-all hover:scale-105 active:scale-95 cursor-pointer ring-2 ring-amber-500/10"
             aria-label="Open Management Live Chat"
           >
             <div className="relative">
               {unreadCount > 0 ? (
-                <span className="w-5 h-5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center absolute -top-1.5 -right-1.5 ring-2 ring-[#0E1118] animate-bounce">
+                <span className="w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center absolute -top-1 -right-1 ring-1 ring-[#0E1118] animate-bounce">
                   {unreadCount}
                 </span>
               ) : (
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 absolute -top-0.5 -right-0.5 ring-2 ring-[#0E1118] animate-pulse" />
+                <span className="w-2 h-2 rounded-full bg-emerald-400 absolute -top-0.5 -right-0.5 ring-1 ring-[#0E1118] animate-pulse" />
               )}
-              <div className="w-9 h-9 rounded-full bg-amber-500/20 text-amber-300 flex items-center justify-center shrink-0 border border-amber-500/30">
-                <MessageSquare className="w-4 h-4" />
+              <div className="w-7 h-7 rounded-full bg-amber-500/20 text-amber-300 flex items-center justify-center shrink-0 border border-amber-500/30">
+                <MessageSquare className="w-3.5 h-3.5" />
               </div>
             </div>
 
-            <div className="text-left pr-1">
+            <div className="text-left pr-0.5">
               <div className="flex items-center gap-1.5">
-                <span className="text-xs font-bold text-white block tracking-tight">
-                  Chat with Management
+                <span className="text-[11px] sm:text-xs font-bold text-white block tracking-tight">
+                  VIP Concierge Chat
                 </span>
                 {unreadCount > 0 && (
-                  <span className="px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-300 text-[9px] font-mono font-bold">
-                    NEW REPLY
+                  <span className="px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-300 text-[8px] font-mono font-bold">
+                    NEW
                   </span>
                 )}
               </div>
-              <span className="text-[10px] text-amber-400/90 font-mono block">
-                {celebrityName} Executive Liaison
+              <span className="text-[9px] text-amber-400/80 font-mono block leading-tight">
+                Direct Management Desk
               </span>
             </div>
           </button>
         )}
       </div>
 
-      {/* Floating Live Chat Box */}
+      {/* Floating Live Chat Box (Optimized size: max width 360px, height 480px) */}
       {isOpen && (
-        <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50 w-[calc(100vw-32px)] sm:w-[430px] h-[580px] max-h-[88vh] rounded-3xl bg-[#0B0D14]/98 border border-white/[0.12] shadow-2xl backdrop-blur-2xl flex flex-col overflow-hidden animate-fadeIn text-slate-100">
+        <div className="fixed bottom-3 right-3 sm:bottom-4 sm:right-4 z-50 w-[calc(100vw-24px)] sm:w-[360px] h-[480px] max-h-[82vh] rounded-2xl bg-[#0B0D14]/98 border border-white/[0.12] shadow-2xl backdrop-blur-2xl flex flex-col overflow-hidden animate-fadeIn text-slate-100">
           
           {/* Header */}
-          <div className="p-4 bg-gradient-to-r from-[#121622] via-[#141926] to-[#181e2e] border-b border-white/[0.08] flex items-center justify-between gap-3 shrink-0">
-            <div className="flex items-center gap-3 truncate">
+          <div className="px-3.5 py-2.5 bg-gradient-to-r from-[#121622] via-[#141926] to-[#181e2e] border-b border-white/[0.08] flex items-center justify-between gap-2.5 shrink-0">
+            <div className="flex items-center gap-2.5 truncate">
               <div className="relative shrink-0">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 absolute -top-0.5 -right-0.5 ring-2 ring-[#121622] animate-pulse" />
-                <div className="w-9 h-9 rounded-full bg-amber-500/20 border border-amber-500/30 text-amber-300 flex items-center justify-center">
-                  <ShieldCheck className="w-4 h-4" />
+                <span className="w-2 h-2 rounded-full bg-emerald-400 absolute -top-0.5 -right-0.5 ring-1 ring-[#121622] animate-pulse" />
+                <div className="w-7 h-7 rounded-full bg-amber-500/20 border border-amber-500/30 text-amber-300 flex items-center justify-center">
+                  <ShieldCheck className="w-3.5 h-3.5" />
                 </div>
               </div>
 
               <div className="truncate">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-xs sm:text-sm font-bold text-white tracking-tight truncate">
+                <div className="flex items-center gap-1.5">
+                  <h3 className="text-xs font-bold text-white tracking-tight truncate">
                     Management Liaison Desk
                   </h3>
-                  <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold bg-emerald-500/20 text-emerald-300">
-                    ONLINE
+                  <span className="px-1 py-0.2 rounded text-[8px] font-mono font-semibold bg-emerald-500/20 text-emerald-300">
+                    LIVE
                   </span>
                 </div>
-                <p className="text-[10px] text-slate-400 truncate">
+                <p className="text-[9px] text-slate-400 truncate">
                   Executive Concierge for {celebrityName}
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-1 shrink-0">
+            <div className="flex items-center gap-0.5 shrink-0">
               <button
                 type="button"
                 onClick={() => setShowIdentityDrawer(!showIdentityDrawer)}
-                className={`p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-white/[0.08] transition-colors cursor-pointer ${
+                className={`p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.08] transition-colors cursor-pointer ${
                   showIdentityDrawer ? 'bg-white/[0.1] text-amber-300' : ''
                 }`}
                 title="Your Details / Profile"
               >
-                <User className="w-4 h-4" />
+                <User className="w-3.5 h-3.5" />
               </button>
 
               <button
                 type="button"
                 onClick={loadChatThread}
-                className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-white/[0.08] transition-colors cursor-pointer"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.08] transition-colors cursor-pointer"
                 title="Refresh Chat Thread"
               >
-                <RefreshCw className="w-4 h-4" />
+                <RefreshCw className="w-3.5 h-3.5" />
               </button>
 
               <button
                 type="button"
                 onClick={() => setIsOpen(false)}
-                className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-white/[0.08] transition-colors cursor-pointer"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.08] transition-colors cursor-pointer"
                 aria-label="Close Contact Box"
               >
-                <X className="w-4 h-4" />
+                <X className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
 
           {/* Optional Profile Info Drawer */}
           {showIdentityDrawer && (
-            <div className="p-3.5 bg-[#080A0F] border-b border-white/[0.08] space-y-2.5 text-xs animate-fadeIn shrink-0">
+            <div className="p-3 bg-[#080A0F] border-b border-white/[0.08] space-y-2 text-xs animate-fadeIn shrink-0">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-mono uppercase tracking-wider text-amber-400 font-bold">
-                  Guest Identification (Optional)
+                <span className="text-[9px] font-mono uppercase tracking-wider text-amber-400 font-bold">
+                  Guest Info (Optional)
                 </span>
                 <button
                   type="button"
                   onClick={() => setShowIdentityDrawer(false)}
-                  className="text-[10px] text-slate-400 hover:text-white"
+                  className="text-[9px] text-slate-400 hover:text-white"
                 >
                   Done
                 </button>
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-1.5">
                 <input
                   type="text"
-                  placeholder="Your Name (e.g. Elena)"
+                  placeholder="Your Name"
                   value={visitorName}
                   onChange={(e) => setVisitorName(e.target.value)}
-                  className="w-full px-2.5 py-1.5 bg-[#121622] border border-white/[0.08] rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400/60"
+                  className="w-full px-2 py-1 bg-[#121622] border border-white/[0.08] rounded-lg text-[11px] text-white placeholder-slate-500 focus:outline-none focus:border-amber-400/60"
                 />
                 <input
                   type="email"
-                  placeholder="Email (for copy of reply)"
+                  placeholder="Email"
                   value={visitorEmail}
                   onChange={(e) => setVisitorEmail(e.target.value)}
-                  className="w-full px-2.5 py-1.5 bg-[#121622] border border-white/[0.08] rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400/60"
+                  className="w-full px-2 py-1 bg-[#121622] border border-white/[0.08] rounded-lg text-[11px] text-white placeholder-slate-500 focus:outline-none focus:border-amber-400/60"
                 />
               </div>
             </div>
           )}
 
           {/* Chat Messages Stream */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3.5 text-xs">
+          <div className="flex-1 overflow-y-auto p-3 space-y-2.5 text-xs">
             
             {/* System Executive Welcome Card */}
-            <div className="p-3.5 rounded-2xl bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent border border-amber-500/20 space-y-2 shadow-sm">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-amber-300">
-                  Official Executive Greeting
+            <div className="p-2.5 rounded-xl bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent border border-amber-500/20 space-y-1 shadow-sm">
+              <div className="flex items-center gap-1.5">
+                <Sparkles className="w-3 h-3 text-amber-400 shrink-0" />
+                <span className="text-[9px] font-mono font-bold uppercase tracking-wider text-amber-300">
+                  Executive Concierge
                 </span>
               </div>
-              <p className="text-xs text-slate-200 leading-relaxed">
-                Welcome to the private liaison desk for <strong>{celebrityName}</strong>. You may chat directly with authorized management below regarding VIP passes, private salons, or payment confirmations.
+              <p className="text-[11px] text-slate-200 leading-relaxed">
+                Direct desk for <strong>{celebrityName}</strong>. Chat with management regarding VIP access, salon passes, or payment clearance.
               </p>
             </div>
 
             {/* Quick Prompts (if conversation is new or has few messages) */}
             {(!activeInquiry || activeInquiry.messages.length <= 1) && (
-              <div className="space-y-1.5 pt-1">
-                <span className="text-[10px] font-mono text-slate-400 block uppercase">
-                  Suggested Questions:
+              <div className="space-y-1 pt-0.5">
+                <span className="text-[9px] font-mono text-slate-400 block uppercase">
+                  Quick Topics:
                 </span>
-                <div className="flex flex-col gap-1.5">
+                <div className="flex flex-col gap-1">
                   {QUICK_PROMPTS.map((prompt, idx) => (
                     <button
                       key={idx}
                       type="button"
                       onClick={() => handleSendMessage(prompt)}
-                      className="w-full text-left p-2 rounded-xl bg-white/[0.03] hover:bg-white/[0.08] border border-white/[0.06] hover:border-amber-500/30 text-slate-300 hover:text-white text-[11px] transition-all cursor-pointer"
+                      className="w-full text-left p-1.5 rounded-lg bg-white/[0.03] hover:bg-white/[0.08] border border-white/[0.06] hover:border-amber-500/30 text-slate-300 hover:text-white text-[10px] transition-all cursor-pointer leading-snug"
                     >
                       {prompt}
                     </button>
@@ -370,17 +370,17 @@ export function FloatingContactBox() {
                   key={m.id}
                   className={`flex flex-col ${isMgmt ? 'items-start' : 'items-end'} space-y-1 animate-fadeIn`}
                 >
-                  <div className="flex items-center gap-1.5 px-1">
-                    <span className="text-[10px] font-mono text-slate-400">
-                      {isMgmt ? (m.senderRole || 'Executive Management') : (m.senderName || 'You')}
+                  <div className="flex items-center gap-1 px-1">
+                    <span className="text-[9px] font-mono text-slate-400">
+                      {isMgmt ? (m.senderRole || 'Executive Desk') : (m.senderName || 'You')}
                     </span>
-                    <span className="text-[9px] font-mono text-slate-500">
+                    <span className="text-[8px] font-mono text-slate-500">
                       {new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
 
                   <div
-                    className={`p-3.5 rounded-2xl max-w-[88%] leading-relaxed whitespace-pre-wrap text-xs shadow-md ${
+                    className={`p-2.5 rounded-xl max-w-[90%] leading-relaxed whitespace-pre-wrap text-[11px] shadow-sm ${
                       isMgmt
                         ? 'bg-gradient-to-br from-amber-500/20 to-amber-500/10 text-amber-50 border border-amber-500/30 rounded-tl-sm'
                         : 'bg-white/[0.09] text-white border border-white/[0.12] rounded-tr-sm'
@@ -390,9 +390,9 @@ export function FloatingContactBox() {
                   </div>
 
                   {!isMgmt && (
-                    <div className="flex items-center gap-1 text-[9px] font-mono text-emerald-400 pr-1">
-                      <CheckCheck className="w-3 h-3" />
-                      <span>Delivered to Management</span>
+                    <div className="flex items-center gap-1 text-[8px] font-mono text-emerald-400 pr-1">
+                      <CheckCheck className="w-2.5 h-2.5" />
+                      <span>Sent</span>
                     </div>
                   )}
                 </div>
@@ -403,32 +403,32 @@ export function FloatingContactBox() {
           </div>
 
           {/* Footer Input Area */}
-          <div className="p-3 bg-[#080A0F] border-t border-white/[0.08] shrink-0">
-            <form onSubmit={handleFormSubmit} className="flex items-center gap-2">
+          <div className="p-2.5 bg-[#080A0F] border-t border-white/[0.08] shrink-0">
+            <form onSubmit={handleFormSubmit} className="flex items-center gap-1.5">
               <input
                 type="text"
-                placeholder={`Ask ${celebrityName} management a question...`}
+                placeholder="Type your message..."
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
                 disabled={sending}
-                className="flex-1 px-3.5 py-2.5 bg-[#121622] border border-white/[0.1] rounded-2xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400/60 transition-colors"
+                className="flex-1 px-3 py-2 bg-[#121622] border border-white/[0.1] rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400/60 transition-colors"
               />
 
               <button
                 type="submit"
                 disabled={sending || !inputText.trim()}
-                className="min-h-[40px] px-4 rounded-2xl bg-white hover:bg-slate-100 active:scale-95 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md cursor-pointer disabled:opacity-40 shrink-0"
+                className="h-8 px-3 rounded-xl bg-white hover:bg-slate-100 active:scale-95 text-slate-950 font-bold text-xs flex items-center justify-center gap-1 transition-all shadow cursor-pointer disabled:opacity-40 shrink-0"
               >
-                <Send className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Send</span>
+                <Send className="w-3 h-3" />
+                <span className="hidden sm:inline text-[11px]">Send</span>
               </button>
             </form>
 
-            <div className="flex items-center justify-between text-[9px] text-slate-500 font-mono mt-2 px-1">
-              <span>Encrypted In-App VIP Liaison</span>
+            <div className="flex items-center justify-between text-[8px] text-slate-500 font-mono mt-1.5 px-0.5">
+              <span>Encrypted Liaison</span>
               <span className="text-emerald-400 flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                Direct Desk Connection
+                <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse" />
+                Connected
               </span>
             </div>
           </div>

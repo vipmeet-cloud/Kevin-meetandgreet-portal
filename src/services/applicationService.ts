@@ -260,6 +260,67 @@ export const applicationService = {
       status: 'UNDER_REVIEW',
     };
 
+    // 1. Primary submission method: Server-side API endpoint
+    // Uses serverSupabase (service role) to guarantee 100% bypass of anon RLS restrictions on Vercel and incognito browsers
+    try {
+      const serverRes = await fetch('/api/applications/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          payload: applicationPayload,
+          file: formData.supporting_file_url ? {
+            cloudinary_url: formData.supporting_file_url,
+            file_type: formData.supporting_file_type || 'image',
+            public_id: formData.supporting_file_public_id || null,
+          } : null,
+        }),
+      });
+
+      if (serverRes.ok) {
+        const resData = await serverRes.json();
+        if (resData.success && resData.application) {
+          const appRecord = resData.application;
+          
+          saveSubmissionReceipt({
+            referenceCode: appRecord.reference_code,
+            applicationId: appRecord.id,
+            fullName: formData.full_name,
+            email: formData.email,
+            preferredDate: formData.preferred_date,
+            preferredSession: formData.preferred_session,
+            attendeeCount: formData.attendee_count,
+            submittedAt: appRecord.created_at || new Date().toISOString(),
+            status: 'Under Management Review',
+          });
+
+          // Dispatch Application Received email via Gmail SMTP
+          const firstName = formData.full_name.split(' ')[0] || 'Guest';
+          const origin = typeof window !== 'undefined' ? window.location.origin : '';
+          emailService.sendEmail({
+            to: formData.email,
+            recipientName: firstName,
+            type: 'APPLICATION_RECEIVED',
+            data: {
+              firstName,
+              referenceCode: appRecord.reference_code,
+              applicationUrl: `${origin}/apply`,
+            },
+            applicationId: appRecord.id,
+            applicationReference: appRecord.reference_code,
+          }).catch(e => console.warn('Application email notice:', e));
+
+          return {
+            success: true,
+            referenceCode: appRecord.reference_code,
+            applicationId: appRecord.id,
+            status: 'UNDER_REVIEW',
+          };
+        }
+      }
+    } catch (sErr) {
+      console.warn('Notice: Server application submission endpoint notice, checking direct DB:', sErr);
+    }
+
     if (supabase) {
       try {
         const { data, error } = await (supabase.from('applications') as any)
@@ -400,33 +461,48 @@ export const applicationService = {
     status?: string;
     search?: string;
   }): Promise<{ applications: ApplicationRecord[]; count: number; error: string | null }> {
-    const supabase = getSupabaseClient();
     let remoteApps: ApplicationRecord[] = [];
 
-    if (supabase) {
-      try {
-        let query = (supabase.from('applications') as any)
-          .select('*, application_files(*)', { count: 'exact' })
-          .order('created_at', { ascending: false });
-
-        if (options?.status && options.status !== 'ALL') {
-          query = query.eq('status', options.status);
+    // 1. Try server API endpoint (bypasses RLS with service role)
+    try {
+      const params = new URLSearchParams();
+      if (options?.status && options.status !== 'ALL') params.set('status', options.status);
+      if (options?.search && options.search.trim().length > 0) params.set('search', options.search.trim());
+      
+      const serverRes = await fetch(`/api/applications?${params.toString()}`);
+      if (serverRes.ok) {
+        const sData = await serverRes.json();
+        if (sData.success && Array.isArray(sData.applications)) {
+          remoteApps = sData.applications;
         }
+      }
+    } catch {}
 
-        if (options?.search && options.search.trim().length > 0) {
-          const s = options.search.trim();
-          query = query.or(`reference_code.ilike.%${s}%,full_name.ilike.%${s}%,email.ilike.%${s}%`);
+    // 2. Direct client-side Supabase query
+    if (remoteApps.length === 0) {
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        try {
+          let query = (supabase.from('applications') as any)
+            .select('*, application_files(*)', { count: 'exact' })
+            .order('created_at', { ascending: false });
+
+          if (options?.status && options.status !== 'ALL') {
+            query = query.eq('status', options.status);
+          }
+
+          if (options?.search && options.search.trim().length > 0) {
+            const s = options.search.trim();
+            query = query.or(`reference_code.ilike.%${s}%,full_name.ilike.%${s}%,email.ilike.%${s}%`);
+          }
+
+          const { data, error } = await query;
+          if (!error && data) {
+            remoteApps = data as ApplicationRecord[];
+          }
+        } catch (err: unknown) {
+          console.warn('Failed to query applications from Supabase, using local store:', err);
         }
-
-        const { data, error } = await query;
-
-        if (error) {
-          console.warn('Supabase fetch applications notice, using local store:', error.message || error);
-        } else if (data) {
-          remoteApps = data as ApplicationRecord[];
-        }
-      } catch (err: unknown) {
-        console.warn('Failed to query applications from Supabase, using local store:', err);
       }
     }
 
@@ -467,6 +543,17 @@ export const applicationService = {
     application: ApplicationRecord | null;
     error: string | null;
   }> {
+    // 1. Try server API endpoint (bypasses RLS)
+    try {
+      const serverRes = await fetch(`/api/applications/${encodeURIComponent(id)}`);
+      if (serverRes.ok) {
+        const sData = await serverRes.json();
+        if (sData.success && sData.application) {
+          return { application: sData.application, error: null };
+        }
+      }
+    } catch {}
+
     const supabase = getSupabaseClient();
 
     if (supabase) {

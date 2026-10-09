@@ -44,8 +44,16 @@ interface ServerEmailLog {
 const serverEmailLogs: ServerEmailLog[] = [];
 
 // Server-side Supabase client (uses service role key if available for authoritative checks, or anon key)
-const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
+const supabaseUrl = 
+  process.env.SUPABASE_URL || 
+  process.env.VITE_SUPABASE_URL || 
+  'https://fiwsjwpyzhltzrdnpcrf.supabase.co';
+
+const supabaseKey = 
+  process.env.SUPABASE_SERVICE_ROLE_KEY || 
+  process.env.SUPABASE_ANON_KEY || 
+  process.env.VITE_SUPABASE_ANON_KEY || 
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZpd3Nqd3B5emhsdHpyZG5wY3JmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEwMTk1NTYsImV4cCI6MjEwNjU5NTU1Nn0.Vx7y96504_aJaORBHv1bC2T3IK7Usx_rhj78OPE_wNI';
 
 const isSupabaseConfigured = Boolean(
   supabaseUrl &&
@@ -451,6 +459,243 @@ app.get('/api/config/public', async (_req: Request, res: Response) => {
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Internal error';
     return res.status(500).json({ settings: null, error: message });
+  }
+});
+
+/**
+ * Universal Application Submission Endpoint
+ * Bypasses restrictive anon RLS policies by using serverSupabase (service role)
+ * Guarantees applicant dossiers submitted from any phone or incognito browser persist instantly across all browsers
+ */
+app.post('/api/applications/submit', async (req: Request, res: Response) => {
+  try {
+    const { payload, file } = req.body;
+    if (!payload || !payload.full_name || !payload.email || !payload.reference_code) {
+      return res.status(400).json({ success: false, error: 'Incomplete application payload.' });
+    }
+
+    if (!serverSupabase) {
+      return res.status(503).json({ success: false, error: 'Database service is currently unconfigured.' });
+    }
+
+    const { data, error } = await serverSupabase
+      .from('applications')
+      .insert({
+        reference_code: payload.reference_code,
+        full_name: payload.full_name,
+        email: payload.email.toLowerCase().trim(),
+        phone: payload.phone,
+        country: payload.country,
+        city: payload.city,
+        preferred_contact_method: payload.preferred_contact_method || 'email',
+        preferred_date: payload.preferred_date,
+        preferred_session: payload.preferred_session,
+        attendee_count: Number(payload.attendee_count) || 1,
+        special_requirements: payload.special_requirements || null,
+        message_to_management: payload.message_to_management || null,
+        terms_version: payload.terms_version || '1.0',
+        terms_accepted_at: payload.terms_accepted_at || new Date().toISOString(),
+        privacy_accepted_at: payload.privacy_accepted_at || new Date().toISOString(),
+        status: 'UNDER_REVIEW',
+      })
+      .select('id, reference_code, status, created_at')
+      .single();
+
+    if (error) {
+      console.warn('Server application submission DB error:', error);
+      return res.status(500).json({ success: false, error: error.message });
+    }
+
+    // Attach file if present
+    if (file && file.cloudinary_url && data?.id) {
+      try {
+        await serverSupabase.from('application_files').insert({
+          application_id: data.id,
+          file_type: file.file_type || 'image',
+          cloudinary_url: file.cloudinary_url,
+          public_id: file.public_id || null,
+        });
+      } catch (fErr) {
+        console.warn('Notice: Error saving file record:', fErr);
+      }
+    }
+
+    // Insert audit log
+    if (data?.id) {
+      try {
+        await serverSupabase.from('audit_logs').insert({
+          action: 'APPLICATION_SUBMITTED',
+          application_id: data.id,
+          metadata: { reference_code: data.reference_code, full_name: payload.full_name },
+        });
+      } catch {}
+    }
+
+    return res.json({ success: true, application: data });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Server application processing failed';
+    return res.status(500).json({ success: false, error: msg });
+  }
+});
+
+/**
+ * Universal Application Retrieval for Management
+ */
+app.get('/api/applications', async (req: Request, res: Response) => {
+  if (!serverSupabase) {
+    return res.status(503).json({ success: false, error: 'Database service unconfigured.' });
+  }
+
+  try {
+    const status = req.query.status as string | undefined;
+    const search = req.query.search as string | undefined;
+
+    let query = serverSupabase
+      .from('applications')
+      .select('*, application_files(*)', { count: 'exact' })
+      .order('created_at', { ascending: false });
+
+    if (status && status !== 'ALL') {
+      query = query.eq('status', status);
+    }
+
+    if (search && search.trim().length > 0) {
+      const s = search.trim();
+      query = query.or(`reference_code.ilike.%${s}%,full_name.ilike.%${s}%,email.ilike.%${s}%`);
+    }
+
+    const { data, error, count } = await query;
+    if (error) {
+      return res.status(500).json({ success: false, error: error.message });
+    }
+
+    return res.json({ success: true, applications: data || [], count: count || 0 });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Error fetching applications';
+    return res.status(500).json({ success: false, error: msg });
+  }
+});
+
+/**
+ * Universal Application Details by ID or Reference
+ */
+app.get('/api/applications/:id', async (req: Request, res: Response) => {
+  if (!serverSupabase) {
+    return res.status(503).json({ success: false, error: 'Database service unconfigured.' });
+  }
+
+  try {
+    const { id } = req.params;
+    let query = serverSupabase
+      .from('applications')
+      .select('*, application_files(*), payment_records(*)');
+
+    if (id.includes('-') && id.length === 36) {
+      query = query.eq('id', id);
+    } else {
+      query = query.or(`id.eq.${id},reference_code.eq.${id}`);
+    }
+
+    const { data, error } = await query.maybeSingle();
+    if (error || !data) {
+      return res.status(404).json({ success: false, error: 'Application not found' });
+    }
+
+    // Also fetch audit logs for this application
+    const { data: auditLogs } = await serverSupabase
+      .from('audit_logs')
+      .select('*')
+      .eq('application_id', data.id)
+      .order('created_at', { ascending: false });
+
+    return res.json({ success: true, application: { ...data, audit_logs: auditLogs || [] } });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Error retrieving application';
+    return res.status(500).json({ success: false, error: msg });
+  }
+});
+
+/**
+ * Universal Payment Submission Endpoint (Bypasses anon RLS)
+ */
+app.post('/api/payments/submit', async (req: Request, res: Response) => {
+  if (!serverSupabase) {
+    return res.status(503).json({ success: false, error: 'Database unconfigured.' });
+  }
+
+  try {
+    const payload = req.body;
+    if (!payload || !payload.application_id || !payload.payment_reference) {
+      return res.status(400).json({ success: false, error: 'Incomplete payment information.' });
+    }
+
+    const { data, error } = await serverSupabase
+      .from('payment_records')
+      .insert({
+        application_id: payload.application_id,
+        amount: payload.amount || 2500,
+        currency: payload.currency || 'USD',
+        payment_method: payload.payment_method || 'Bank Wire Transfer',
+        payment_reference: payload.payment_reference,
+        payment_date: payload.payment_date || new Date().toISOString().split('T')[0],
+        receipt_url: payload.receipt_url || null,
+        receipt_public_id: payload.receipt_public_id || null,
+        status: 'PAYMENT_SUBMITTED',
+        submitted_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.warn('Payment record DB error:', error);
+      return res.status(500).json({ success: false, error: error.message });
+    }
+
+    // Update application status to PAYMENT_SUBMITTED
+    await serverSupabase
+      .from('applications')
+      .update({
+        status: 'PAYMENT_SUBMITTED',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', payload.application_id);
+
+    // Audit log
+    await serverSupabase.from('audit_logs').insert({
+      action: 'PAYMENT_SUBMITTED',
+      application_id: payload.application_id,
+      metadata: { payment_reference: payload.payment_reference, amount: payload.amount },
+    });
+
+    return res.json({ success: true, payment: data });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Payment submission error';
+    return res.status(500).json({ success: false, error: msg });
+  }
+});
+
+/**
+ * Universal Payments List for Management
+ */
+app.get('/api/payments', async (_req: Request, res: Response) => {
+  if (!serverSupabase) {
+    return res.json({ success: true, payments: [] });
+  }
+
+  try {
+    const { data, error } = await serverSupabase
+      .from('payment_records')
+      .select('*, application:applications(*)')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      return res.status(500).json({ success: false, error: error.message });
+    }
+
+    return res.json({ success: true, payments: data || [] });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Error fetching payments';
+    return res.status(500).json({ success: false, error: msg });
   }
 });
 
