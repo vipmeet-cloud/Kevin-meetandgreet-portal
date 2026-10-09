@@ -48,7 +48,7 @@ export function EmailHistoryPage() {
     setResendingId(log.id);
     setNotice(null);
     try {
-      const res = await emailService.retryEmail(log.id);
+      const res = await emailService.retryEmail(log.id, log);
       if (res.success) {
         setNotice({ message: `Email to ${log.recipient} was resent successfully.`, type: 'success' });
         await loadLogs();
@@ -281,10 +281,10 @@ export function EmailHistoryPage() {
                                 onClick={() => handleRetry(log)}
                                 disabled={resendingId === log.id}
                                 className="px-2.5 py-1 bg-[#D4AF37]/10 hover:bg-[#D4AF37]/20 border border-[#D4AF37]/30 rounded-lg text-[#D4AF37] transition-all text-[11px] font-medium inline-flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                                title="Resend"
+                                title="Retry Send"
                               >
                                 <Send className={`w-3 h-3 ${resendingId === log.id ? 'animate-spin' : ''}`} />
-                                <span>Resend</span>
+                                <span>Retry Send</span>
                               </button>
                             )}
                           </div>

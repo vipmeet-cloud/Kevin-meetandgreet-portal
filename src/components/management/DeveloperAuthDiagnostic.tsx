@@ -34,6 +34,10 @@ interface DiagnosticResult {
   latencyMs: number;
   dbVisitorsCount?: number;
   dbInquiriesCount?: number;
+  smtpConfigured?: boolean;
+  smtpVerified?: boolean;
+  smtpSender?: string;
+  smtpError?: string;
 }
 
 export function DeveloperAuthDiagnostic() {
@@ -48,6 +52,10 @@ export function DeveloperAuthDiagnostic() {
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileSaveSuccess, setProfileSaveSuccess] = useState(false);
   const [profileSaveError, setProfileSaveError] = useState<string | null>(null);
+
+  // Email Test state
+  const [testingEmail, setTestingEmail] = useState(false);
+  const [testEmailFeedback, setTestEmailFeedback] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
   useEffect(() => {
     if (managementProfile) {
@@ -161,6 +169,23 @@ export function DeveloperAuthDiagnostic() {
         if (typeof iCount === 'number') dbInquiriesCount = iCount;
       } catch {}
 
+      // 7. Check server-side Gmail SMTP diagnostic status
+      let smtpConfigured = false;
+      let smtpVerified = false;
+      let smtpSender = 'Unconfigured';
+      let smtpError: string | undefined = undefined;
+
+      try {
+        const smtpRes = await fetch('/api/emails/diagnostic/status');
+        if (smtpRes.ok) {
+          const smtpData = await smtpRes.json();
+          smtpConfigured = Boolean(smtpData.status?.configured);
+          smtpVerified = Boolean(smtpData.status?.verified);
+          smtpSender = smtpData.status?.senderAddress || 'Unconfigured';
+          smtpError = smtpData.status?.error;
+        }
+      } catch {}
+
       const endTime = performance.now();
 
       setResult({
@@ -180,12 +205,59 @@ export function DeveloperAuthDiagnostic() {
         latencyMs: Math.round(endTime - startTime),
         dbVisitorsCount,
         dbInquiriesCount,
+        smtpConfigured,
+        smtpVerified,
+        smtpSender,
+        smtpError,
       });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Diagnostic run failed';
       setDiagnosticError(msg);
     } finally {
       setTesting(false);
+    }
+  };
+
+  const handleSendDiagnosticTestEmail = async () => {
+    setTestingEmail(true);
+    setTestEmailFeedback(null);
+
+    try {
+      const { data: sessionData } = await (getSupabaseClient()?.auth.getSession() || Promise.resolve({ data: { session: null } }));
+      const token = sessionData.session?.access_token;
+
+      const res = await fetch('/api/emails/diagnostic/test', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          targetEmail: user?.email || managementProfile?.email || 'management.meet.greet@gmail.com'
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setTestEmailFeedback({
+          message: data.simulated
+            ? `Email simulated safely (SMTP credentials unconfigured in environment). Logged in Email History.`
+            : `Test email dispatched via Gmail SMTP to ${data.recipient || 'management mailbox'}. Recorded in Email History.`,
+          type: 'success',
+        });
+      } else {
+        setTestEmailFeedback({
+          message: data.error || 'SMTP test dispatch failed. Check Google App Password in environment variables.',
+          type: 'error',
+        });
+      }
+      // Refresh diagnostic status
+      await runDiagnostic();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to test email dispatch';
+      setTestEmailFeedback({ message: msg, type: 'error' });
+    } finally {
+      setTestingEmail(false);
     }
   };
 

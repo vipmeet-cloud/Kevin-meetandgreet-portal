@@ -20,8 +20,9 @@ function saveStoredDevEmailLogs(logs: EmailLogRecord[]) {
 
 export const emailService = {
   /**
-   * Dispatch an email notification via server-side Resend API.
-   * If server or Resend API key is unconfigured, logs and simulates cleanly without throwing errors.
+   * Dispatch an email notification via server-side Gmail SMTP service.
+   * If SMTP server credentials are unconfigured or temporarily failing,
+   * records status cleanly without throwing errors or interrupting core portal workflows.
    */
   async sendEmail(params: {
     to: string;
@@ -64,6 +65,7 @@ export const emailService = {
           application_reference: params.applicationReference || null,
           status: result.status || (result.simulated ? 'simulated' : 'sent'),
           message_id: result.messageId || null,
+          error_message: result.error || null,
           sent_at: nowIso,
           created_at: nowIso,
         };
@@ -72,7 +74,11 @@ export const emailService = {
         logs.unshift(localRecord);
         saveStoredDevEmailLogs(logs);
 
-        return { success: true, simulated: result.simulated };
+        return {
+          success: result.status !== 'failed',
+          simulated: result.simulated,
+          error: result.error,
+        };
       }
     } catch (err: unknown) {
       console.warn('Backend email endpoint notice, using local simulation:', err);
@@ -152,9 +158,18 @@ export const emailService = {
   /**
    * Retry sending an email that previously failed
    */
-  async retryEmail(logId: string): Promise<{ success: boolean; error?: string }> {
+  async retryEmail(logId: string, logData?: EmailLogRecord): Promise<{ success: boolean; error?: string }> {
+    let target = logData;
     const logs = getStoredDevEmailLogs();
-    const target = logs.find(l => l.id === logId);
+
+    if (!target) {
+      target = logs.find(l => l.id === logId);
+    }
+    if (!target) {
+      const history = await this.fetchEmailHistory();
+      target = history.logs.find(l => l.id === logId);
+    }
+
     if (!target) return { success: false, error: 'Email record not found' };
 
     const result = await this.sendEmail({
@@ -167,8 +182,11 @@ export const emailService = {
     });
 
     if (result.success) {
-      target.status = result.simulated ? 'simulated' : 'sent';
-      saveStoredDevEmailLogs(logs);
+      const existingInDev = logs.find(l => l.id === logId);
+      if (existingInDev) {
+        existingInDev.status = result.simulated ? 'simulated' : 'sent';
+        saveStoredDevEmailLogs(logs);
+      }
     }
 
     return result;

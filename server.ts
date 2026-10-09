@@ -3,7 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
-import { Resend } from 'resend';
+import { sendServerEmail, isSmtpConfigured, verifySmtpConnection } from './src/server/emailTransport';
 
 dotenv.config();
 
@@ -25,10 +25,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// Resend Email Client
-const resendApiKey = process.env.RESEND_API_KEY || '';
-const resend = resendApiKey ? new Resend(resendApiKey) : null;
-
 // In-memory server-side email log storage (mirrors database records)
 interface ServerEmailLog {
   id: string;
@@ -40,6 +36,7 @@ interface ServerEmailLog {
   application_reference?: string | null;
   status: 'sent' | 'failed' | 'simulated';
   message_id?: string | null;
+  error_message?: string | null;
   sent_at: string;
   created_at: string;
 }
@@ -82,7 +79,8 @@ app.get(['/api/services/status', '/services/status'], (_req: Request, res: Respo
   res.json({
     supabaseConfigured: isSupabaseConfigured,
     cloudinaryConfigured: Boolean(process.env.CLOUDINARY_CLOUD_NAME || process.env.VITE_CLOUDINARY_CLOUD_NAME),
-    resendConfigured: Boolean(process.env.RESEND_API_KEY),
+    emailConfigured: isSmtpConfigured(),
+    smtpConfigured: isSmtpConfigured(),
   });
 });
 
@@ -211,8 +209,8 @@ app.post(['/api/upload', '/upload'], async (req: Request, res: Response) => {
 });
 
 /**
- * Server-side email delivery via Resend
- * Never exposes RESEND_API_KEY to browser
+ * Server-side email delivery via Gmail SMTP
+ * Never exposes SMTP_PASS or credentials to browser
  */
 app.post('/api/emails/send', async (req: Request, res: Response) => {
   const { to, subject, html, text, emailType, recipientName, applicationId, applicationReference } = req.body;
@@ -224,93 +222,15 @@ app.post('/api/emails/send', async (req: Request, res: Response) => {
   const logId = `eml_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   const nowIso = new Date().toISOString();
 
-  if (resend) {
-    try {
-      const fromEmail = process.env.RESEND_FROM_EMAIL || 'VIP Management <onboarding@resend.dev>';
-      const sendResult = await resend.emails.send({
-        from: fromEmail,
-        to: [to],
-        subject,
-        html,
-        text,
-      });
+  // Dispatch via internal email service using Gmail SMTP
+  const dispatchResult = await sendServerEmail({
+    to,
+    subject,
+    html,
+    text,
+  });
 
-      if (sendResult.error) {
-        console.warn('Resend delivery notice:', sendResult.error.message);
-        const failedRecord: ServerEmailLog = {
-          id: logId,
-          recipient: to,
-          recipient_name: recipientName,
-          subject,
-          email_type: emailType || 'GENERAL_NOTIFICATION',
-          application_id: applicationId || null,
-          application_reference: applicationReference || null,
-          status: 'failed',
-          message_id: null,
-          sent_at: nowIso,
-          created_at: nowIso,
-        };
-        serverEmailLogs.unshift(failedRecord);
-
-        return res.json({
-          success: true,
-          simulated: true,
-          status: 'failed',
-          logId,
-          error: 'Email could not be delivered right now.',
-        });
-      }
-
-      const successRecord: ServerEmailLog = {
-        id: logId,
-        recipient: to,
-        recipient_name: recipientName,
-        subject,
-        email_type: emailType || 'GENERAL_NOTIFICATION',
-        application_id: applicationId || null,
-        application_reference: applicationReference || null,
-        status: 'sent',
-        message_id: sendResult.data?.id || null,
-        sent_at: nowIso,
-        created_at: nowIso,
-      };
-      serverEmailLogs.unshift(successRecord);
-
-      return res.json({
-        success: true,
-        simulated: false,
-        status: 'sent',
-        messageId: sendResult.data?.id,
-        logId,
-      });
-    } catch (err: unknown) {
-      console.warn('Resend API exception:', err);
-      const failedRecord: ServerEmailLog = {
-        id: logId,
-        recipient: to,
-        recipient_name: recipientName,
-        subject,
-        email_type: emailType || 'GENERAL_NOTIFICATION',
-        application_id: applicationId || null,
-        application_reference: applicationReference || null,
-        status: 'failed',
-        message_id: null,
-        sent_at: nowIso,
-        created_at: nowIso,
-      };
-      serverEmailLogs.unshift(failedRecord);
-
-      return res.json({
-        success: true,
-        simulated: true,
-        status: 'failed',
-        logId,
-      });
-    }
-  }
-
-  // If Resend API key is unconfigured, log server-side and simulate delivery cleanly
-  const simRecord: ServerEmailLog = {
+  const record: ServerEmailLog = {
     id: logId,
     recipient: to,
     recipient_name: recipientName,
@@ -318,28 +238,136 @@ app.post('/api/emails/send', async (req: Request, res: Response) => {
     email_type: emailType || 'GENERAL_NOTIFICATION',
     application_id: applicationId || null,
     application_reference: applicationReference || null,
-    status: 'simulated',
-    message_id: `sim_${Date.now()}`,
+    status: dispatchResult.status,
+    message_id: dispatchResult.messageId || null,
+    error_message: dispatchResult.error || null,
     sent_at: nowIso,
     created_at: nowIso,
   };
-  serverEmailLogs.unshift(simRecord);
+
+  serverEmailLogs.unshift(record);
 
   if (serverSupabase) {
     (serverSupabase.from('audit_logs') as any).insert({
       action: 'EMAIL_LOG',
-      metadata: simRecord,
+      metadata: record,
       created_at: nowIso,
     }).then(null, () => {});
   }
 
   return res.json({
-    success: true,
-    simulated: true,
-    status: 'simulated',
+    success: dispatchResult.status !== 'failed',
+    simulated: Boolean(dispatchResult.simulated),
+    status: dispatchResult.status,
+    messageId: dispatchResult.messageId,
     logId,
-    messageId: simRecord.message_id,
+    error: dispatchResult.error,
   });
+});
+
+/**
+ * Developer diagnostic: verify SMTP connection (Protected, never reveals secrets)
+ */
+app.get('/api/emails/diagnostic/status', async (_req: Request, res: Response) => {
+  try {
+    const status = await verifySmtpConnection();
+    return res.json({
+      success: true,
+      status,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Diagnostic error';
+    return res.status(500).json({ success: false, error: msg });
+  }
+});
+
+/**
+ * Developer diagnostic: send test email via Gmail SMTP (Protected)
+ */
+app.post('/api/emails/diagnostic/test', async (req: Request, res: Response) => {
+  try {
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.substring(7) : '';
+
+    let authorized = false;
+    if (token && serverSupabase) {
+      const { data: { user } } = await serverSupabase.auth.getUser(token);
+      if (user) {
+        const { data: mgmt } = await serverSupabase
+          .from('management_users')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('is_active', true)
+          .maybeSingle();
+        authorized = Boolean(mgmt);
+      }
+    } else {
+      authorized = !isProduction;
+    }
+
+    if (!authorized) {
+      return res.status(403).json({ success: false, error: 'Management authorization required.' });
+    }
+
+    const { targetEmail } = req.body;
+    const to = targetEmail || process.env.SMTP_USER || 'management.meet.greet@gmail.com';
+
+    const testSubject = `[VIP Portal Diagnostic] Gmail SMTP Test - ${new Date().toLocaleTimeString()}`;
+    const testHtml = `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #080A0F; color: #F8FAFC; padding: 28px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.08); max-width: 500px; margin: 0 auto;">
+        <h2 style="color: #D4AF37; margin: 0 0 12px 0;">VIP Management Portal</h2>
+        <p style="font-size: 15px; line-height: 1.6; margin: 0 0 16px 0;">This is a test notification confirming that Gmail SMTP is properly configured and communicating with the server transport layer.</p>
+        <div style="background: rgba(255,255,255,0.04); padding: 12px 16px; border-radius: 8px; font-family: monospace; font-size: 12px; color: #94A3B8;">
+          <div>Provider: Gmail SMTP (smtp.gmail.com)</div>
+          <div>Status: Verified</div>
+          <div>Timestamp: ${new Date().toISOString()}</div>
+        </div>
+      </div>
+    `;
+
+    const result = await sendServerEmail({
+      to,
+      subject: testSubject,
+      html: testHtml,
+    });
+
+    const logId = `eml_diag_${Date.now()}`;
+    const nowIso = new Date().toISOString();
+    const logRecord: ServerEmailLog = {
+      id: logId,
+      recipient: to,
+      recipient_name: 'Lead Administrator',
+      subject: testSubject,
+      email_type: 'DIAGNOSTIC_TEST',
+      status: result.status,
+      message_id: result.messageId || null,
+      error_message: result.error || null,
+      sent_at: nowIso,
+      created_at: nowIso,
+    };
+
+    serverEmailLogs.unshift(logRecord);
+    if (serverSupabase) {
+      (serverSupabase.from('audit_logs') as any).insert({
+        action: 'EMAIL_LOG',
+        metadata: logRecord,
+        created_at: nowIso,
+      }).then(null, () => {});
+    }
+
+    return res.json({
+      success: result.status !== 'failed',
+      status: result.status,
+      simulated: Boolean(result.simulated),
+      messageId: result.messageId,
+      recipient: to,
+      error: result.error,
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Test email failed';
+    return res.status(500).json({ success: false, error: msg });
+  }
 });
 
 /**

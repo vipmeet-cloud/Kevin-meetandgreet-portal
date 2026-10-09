@@ -87,6 +87,7 @@ export interface ServiceIntegrationStatus {
   supabaseConnected: boolean;
   supabaseUrl: string;
   cloudinaryConfigured: boolean;
-  resendConfigured: boolean;
+  emailConfigured: boolean;
+  smtpConfigured: boolean;
   hasActiveSettings: boolean;
 }
